@@ -4,9 +4,11 @@ import SwiftUI
 /// The menu bar panel: header with the mode control, the six feature rows, then
 /// Settings and Quit.
 struct PopoverRootView: View {
-    @Bindable var preferences: Preferences
+    @Bindable var environment: AppEnvironment
 
     @Environment(\.openSettings) private var openSettings
+
+    private var preferences: Preferences { environment.preferences }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,7 +30,10 @@ struct PopoverRootView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
             Spacer(minLength: 8)
-            ModeSegmentedControl(mode: $preferences.mode)
+            ModeSegmentedControl(mode: Binding(
+                get: { preferences.mode },
+                set: { preferences.mode = $0; environment.modeDidChange() }
+            ))
         }
         .padding(.horizontal, Theme.horizontalPadding)
         .padding(.top, 6)
@@ -40,9 +45,14 @@ struct PopoverRootView: View {
             ForEach(Feature.allCases) { feature in
                 FeatureToggleRow(
                     feature: feature,
-                    isEnabled: preferences.isEnabled(feature)
+                    isEnabled: preferences.isEnabled(feature),
+                    // A failing effect says so on its own row rather than failing silently
+                    // or taking the other five down with it.
+                    problem: environment.coordinator.errors[feature]
+                        ?? environment.coordinator.effects[feature]?.unavailableReason
                 ) {
                     preferences.setEnabled(!preferences.isEnabled(feature), for: feature)
+                    environment.enabledFeaturesDidChange()
                 }
             }
         }
@@ -59,7 +69,7 @@ struct PopoverRootView: View {
                 openSettings()
             }
             MenuActionRow(title: "Quit Mica", symbolName: "xmark.square") {
-                NSApp.terminate(nil)
+                environment.terminate()
             }
         }
         .padding(.top, 4)

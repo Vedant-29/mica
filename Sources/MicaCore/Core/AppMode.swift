@@ -1,7 +1,7 @@
 import Foundation
 
 /// The tri-state the menu bar control drives.
-public enum AppMode: String, CaseIterable, Codable, Sendable {
+public nonisolated enum AppMode: String, CaseIterable, Codable, Sendable {
     /// Force every enabled effect on and keep it on, regardless of triggers.
     case on
     /// Engage when a trigger fires, release when it clears.

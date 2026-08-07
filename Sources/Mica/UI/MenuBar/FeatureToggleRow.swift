@@ -9,10 +9,14 @@ import SwiftUI
 struct FeatureToggleRow: View {
     let feature: Feature
     let isEnabled: Bool
+    /// Set when this effect is unavailable or its last run failed.
+    var problem: String?
     let onToggle: () -> Void
 
     @State private var isHovered = false
     @State private var isShowingNote = false
+
+    private var detail: String? { problem ?? feature.note }
 
     var body: some View {
         Button(action: onToggle) {
@@ -22,7 +26,7 @@ struct FeatureToggleRow: View {
                     .font(.system(size: 13))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
-                if feature.note != nil {
+                if detail != nil {
                     noteButton
                 }
             }
@@ -59,13 +63,13 @@ struct FeatureToggleRow: View {
         Button {
             isShowingNote = true
         } label: {
-            Image(systemName: "info.circle.fill")
+            Image(systemName: problem == nil ? "info.circle.fill" : "exclamationmark.triangle.fill")
                 .font(.system(size: 13))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(problem == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.orange))
         }
         .buttonStyle(.plain)
         .popover(isPresented: $isShowingNote, arrowEdge: .trailing) {
-            Text(feature.note ?? "")
+            Text(detail ?? "")
                 .font(.system(size: 12))
                 .frame(width: 220, alignment: .leading)
                 .padding(12)

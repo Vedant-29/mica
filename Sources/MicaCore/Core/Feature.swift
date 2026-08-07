@@ -5,7 +5,7 @@ import Foundation
 /// Raw values are stable identifiers: they key both the `UserDefaults` entries and the
 /// per-effect payloads inside the crash-recovery snapshot, so renaming one would orphan
 /// a user's settings *and* silently drop a pending restore. Change display strings, never these.
-public enum Feature: String, CaseIterable, Codable, Sendable, Identifiable {
+public nonisolated enum Feature: String, CaseIterable, Codable, Sendable, Identifiable {
     case doNotDisturb
     case hideWindows
     case hideDock
@@ -73,7 +73,7 @@ public enum Feature: String, CaseIterable, Codable, Sendable, Identifiable {
 }
 
 /// Which windows `Hide Active Windows` acts on.
-public enum HideWindowsScope: String, CaseIterable, Codable, Sendable {
+public nonisolated enum HideWindowsScope: String, CaseIterable, Codable, Sendable {
     case all
     case exceptFrontmost
 
