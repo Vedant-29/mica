@@ -1,0 +1,24 @@
+{
+  "originHash" : "9512735c01b9eb0f274be3fd3efde40824c05890ca0f58f1b08974f3600cd568",
+  "pins" : [
+    {
+      "identity" : "keyboardshortcuts",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sindresorhus/KeyboardShortcuts",
+      "state" : {
+        "revision" : "ac12762853126cf2e7ad63a6a58e1c9f58c6a0ee",
+        "version" : "1.17.0"
+      }
+    },
+    {
+      "identity" : "menubarextraaccess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/orchetect/MenuBarExtraAccess",
+      "state" : {
+        "revision" : "e93e3a5b814714bf4d4cea67bf63a6b6a8323968",
+        "version" : "1.3.1"
+      }
+    }
+  ],
+  "version" : 3
+}

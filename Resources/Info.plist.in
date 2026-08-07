@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>@APP_NAME@</string>
+    <key>CFBundleDisplayName</key>
+    <string>@APP_NAME@</string>
+    <key>CFBundleExecutable</key>
+    <string>@APP_NAME@</string>
+    <key>CFBundleIdentifier</key>
+    <string>@BUNDLE_ID@</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@BUILD_NUM@</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>@MIN_MACOS@</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+
+    <!-- Menu bar only: no Dock tile, no app switcher entry. -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Load bearing. With sudden termination allowed, macOS may SIGKILL Mica at logout,
+         which would skip every restore path and leave the Dock hidden and Do Not Disturb
+         stuck on with no explanation. Opting out guarantees we get SIGTERM instead. -->
+    <key>NSSupportsSuddenTermination</key>
+    <false/>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
+</dict>
+</plist>
