@@ -13,6 +13,10 @@ struct PopoverRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            StatusBannerView(
+                decision: environment.engagement.decision,
+                capturerName: environment.engagement.capturerName
+            )
             divider
             featureList
             divider

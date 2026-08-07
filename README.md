@@ -86,6 +86,34 @@ driving System Events, Finder, and Shortcuts over AppleScript. In practice that 
 ### Crash safety
 
 Before touching anything, Mica writes a snapshot of your prior system state to disk and
-flushes it. If it's killed while engaged, the next launch finds that snapshot, restores
-everything, and deletes it. Without this a crash would leave your Dock hidden and Do Not
-Disturb stuck on with no indication why.
+flushes it with `F_FULLFSYNC`. If it's killed while engaged, the next launch finds that
+snapshot, restores everything, and deletes it. Without this a crash would leave your Dock
+hidden and Do Not Disturb stuck on with no indication why.
+
+Recovery deliberately skips window restore if the machine rebooted in between (detected
+via the kernel's boot session UUID). Hidden-application state doesn't survive a restart,
+so replaying it could only ever wrongly un-hide something *you* hid after logging back in.
+
+`SIGTERM`, termination and power-off are all trapped so the normal path runs. `SIGKILL`
+can't be, which is exactly what the snapshot is for.
+
+## Known limitations
+
+**Reminders use Mica's own banner, not system notifications.** macOS only grants
+notification access to apps that pass Gatekeeper assessment, which means a notarized
+Developer ID signature — a locally-built app signed with an Apple Development certificate
+is rejected, and `UNUserNotificationCenter` refuses authorization without even prompting.
+Mica detects this and draws an equivalent banner itself, which needs no permission. Sign
+with a Developer ID and notarize, and it switches to real notifications automatically.
+
+**Do Not Disturb needs a one-time setup.** There is no reachable API for setting Focus on
+macOS 26 — the private service is gated behind an Apple-only entitlement, the Intents API
+is read-only, and writing the Focus database needs Full Disk Access and races the daemon
+that owns it. Create two Shortcuts, pick them in Settings → Features, done.
+
+**A few captures are invisible.** The window server lets some Apple-internal streams
+exempt themselves from the count Mica reads. The design errs toward false positives.
+
+**The whole menu bar can't be auto-hidden at runtime**, only the icons. macOS 26 moved
+that setting into Control Center's preferences, read at login, and the app-facing API only
+applies while the calling app is frontmost — which a menu bar utility never is.

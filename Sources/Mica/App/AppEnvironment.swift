@@ -8,33 +8,55 @@ extension KeyboardShortcuts.Name {
     static let toggleMica = Self("toggleMica", default: .init(.s, modifiers: [.option, .command]))
 }
 
-/// Composition root: builds every effect and the coordinator once, and owns the wiring
-/// between user intent (mode, hotkey, feature toggles) and the effects.
+/// Composition root: builds every effect, monitor and store once, and owns the wiring
+/// between user intent and the system.
 @Observable
 @MainActor
 final class AppEnvironment {
 
     let preferences: Preferences
     let coordinator: PrivacyCoordinator
+    let engagement: EngagementController
+
+    let triggerApps = AppListStore(filename: "TriggerApps.json")
+    let excludedApps = AppListStore(filename: "ExcludedApps.json")
 
     @ObservationIgnored private let menuBarIcons = MenuBarIconsEffect()
+    @ObservationIgnored private let doNotDisturbMonitor = DoNotDisturbMonitor()
     @ObservationIgnored private let signalTrap = SignalTrap()
+    /// Exposed so Settings can explain when the built-in banner is standing in for
+    /// system notifications.
+    let notifier = ReminderNotifier()
 
     init(preferences: Preferences = .shared) {
         self.preferences = preferences
 
+        let dndMonitor = doNotDisturbMonitor
         let effects: [Feature: any AnyPrivacyEffect] = [
             .hideDock: DockEffect(),
             .hideWindows: WindowsEffect(),
             .hideDesktopItems: DesktopItemsEffect(),
             .hideWallpaper: WallpaperEffect(),
             .hideMenuBarIcons: menuBarIcons,
+            .doNotDisturb: DoNotDisturbEffect(monitor: dndMonitor) {
+                (preferences.dndShortcutOnID, preferences.dndShortcutOffID)
+            },
         ]
-        self.coordinator = PrivacyCoordinator(preferences: preferences, effects: effects)
+
+        let coordinator = PrivacyCoordinator(preferences: preferences, effects: effects)
+        self.coordinator = coordinator
+        self.engagement = EngagementController(
+            preferences: preferences,
+            coordinator: coordinator,
+            triggerApps: triggerApps,
+            excludedApps: excludedApps,
+            doNotDisturb: dndMonitor,
+            notifier: notifier
+        )
     }
 
-    /// Ordering matters: recovery has to finish before anything is allowed to engage,
-    /// or a stale snapshot could be overwritten by a fresh one before it's been acted on.
+    /// Ordering matters: recovery has to finish before anything is allowed to engage, or
+    /// a stale snapshot could be overwritten by a fresh one before it's been acted on.
     func start() {
         CrashRecovery.runIfNeeded(effects: coordinator.effects)
 
@@ -51,21 +73,22 @@ final class AppEnvironment {
         }
 
         KeyboardShortcuts.onKeyDown(for: .toggleMica) { [weak self] in
-            self?.toggleFromHotkey()
+            guard let self, preferences.hotkeyEnabled else { return }
+            engagement.userToggled()
         }
 
-        // The FrontmostTracker has to be watching before anything engages, or
-        // "All except frontmost" has nothing to exempt.
+        // Must be watching before anything engages, or "All except frontmost" has
+        // nothing to exempt.
         _ = FrontmostTracker.shared
 
         syncEnabledFeatures()
-        syncEngagement()
+        engagement.start()
     }
 
     // MARK: - Intent
 
     func modeDidChange() {
-        syncEngagement()
+        engagement.modeDidChange()
     }
 
     func enabledFeaturesDidChange() {
@@ -73,22 +96,14 @@ final class AppEnvironment {
         coordinator.enabledFeaturesDidChange()
     }
 
-    func toggleFromHotkey() {
-        preferences.toggleFromHotkey()
-        syncEngagement()
+    func settingsDidChange() {
+        engagement.settingsDidChange()
+        coordinator.enabledFeaturesDidChange()
     }
 
     func terminate() {
         coordinator.emergencyRestoreAll()
         NSApp.terminate(nil)
-    }
-
-    // MARK: - Wiring
-
-    private func syncEngagement() {
-        // Auto is inert until the trigger monitors land; for now only an explicit On
-        // engages anything.
-        coordinator.setEngaged(preferences.mode == .on)
     }
 
     /// The menu bar spacer exists whenever the feature is switched on, not only while

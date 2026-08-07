@@ -33,6 +33,16 @@ ditto "$SRC" "$DST"
 xattr -dr com.apple.quarantine "$DST" 2>/dev/null || true
 
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Support/lsregister
+
+# Drop the staging copy before registering the installed one. Two bundles sharing a
+# bundle identifier makes LaunchServices ambiguous about which is "the" app, and macOS
+# then refuses notification authorization outright — the request comes back denied
+# without ever prompting, which silently breaks the Remind-me trigger.
+if [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -u "$SRC" 2>/dev/null || true
+fi
+rm -rf "$SRC"
+
 [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$DST"
 
 echo "  → $DST"

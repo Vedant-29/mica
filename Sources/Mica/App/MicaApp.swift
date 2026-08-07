@@ -18,9 +18,7 @@ struct MicaApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            // Placeholder until the five settings tabs land.
-            Text("Settings")
-                .frame(width: 480, height: 320)
+            SettingsRootView(environment: appDelegate.environment)
         }
     }
 }

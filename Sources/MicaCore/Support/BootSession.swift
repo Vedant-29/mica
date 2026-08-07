@@ -19,6 +19,8 @@ public nonisolated enum BootSession {
         guard sysctlbyname("kern.bootsessionuuid", &buffer, &size, nil, 0) == 0 else {
             return nil
         }
-        return String(cString: buffer)
+        // The kernel includes the trailing NUL in `size`; drop it before decoding.
+        let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
     }
 }
