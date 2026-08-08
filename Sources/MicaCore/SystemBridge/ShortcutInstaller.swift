@@ -1,140 +1,25 @@
-import AppKit
+import Foundation
 
-/// Generates the two Do Not Disturb shortcuts so the user doesn't have to build them.
+/// The two Shortcuts Mica runs to turn Do Not Disturb on and off, found by name.
 ///
-/// A shortcut file is a plist, and `shortcuts sign` will sign an arbitrary one — which
-/// matters, because macOS refuses to import an *unsigned* shortcut unless the user has
-/// first enabled "Allow Untrusted Shortcuts", a setting that only appears after they've
-/// already run one. Signing sidesteps that entirely: the file opens straight into the
-/// Shortcuts add sheet.
+/// Mica does not generate these. Turning Focus on requires the Shortcuts "Set Focus"
+/// action, and that action only behaves correctly when it is created in the Shortcuts app
+/// itself — a programmatically-generated copy imports in a broken "Off" state on macOS 26
+/// (the action's on/off parameter isn't something a third party can set reliably, and the
+/// created shortcut can't be read back to check). Creating it by hand takes seconds
+/// because "Set Focus" already defaults to "Do Not Disturb On until Turned Off", so Mica
+/// guides that instead and simply looks the shortcuts up by name.
 public nonisolated enum ShortcutInstaller {
 
     public static let onName = "Mica Do Not Disturb On"
     public static let offName = "Mica Do Not Disturb Off"
 
-    public enum InstallError: Error, CustomStringConvertible {
-        case signingFailed(String)
-
-        public var description: String {
-            switch self {
-            case .signingFailed(let detail): "Could not create the shortcut: \(detail)"
-            }
-        }
-    }
-
-    /// Writes, signs, and opens both shortcuts. The user confirms each with Add Shortcut.
-    ///
-    /// Signing is the slow part at roughly four seconds each, so the two run concurrently
-    /// rather than back to back.
-    public static func install() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appending(path: "Mica-Shortcuts", directoryHint: .isDirectory)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        async let on = prepare(name: onName, turnOn: true, in: directory)
-        async let off = prepare(name: offName, turnOn: false, in: directory)
-        let urls = try await [on, off]
-
-        // Opened On first so the two Shortcuts sheets arrive in the order the UI
-        // describes them.
-        await MainActor.run {
-            for url in urls { NSWorkspace.shared.open(url) }
-        }
-    }
-
-    private static func prepare(name: String, turnOn: Bool, in directory: URL) throws -> URL {
-        // The imported shortcut takes its name from the file, so the file has to be named
-        // exactly what we later look for in `shortcuts list`.
-        let unsigned = directory.appending(path: "\(name).unsigned.shortcut")
-        let signed = directory.appending(path: "\(name).shortcut")
-        try plist(turnOn: turnOn).write(to: unsigned)
-        try sign(input: unsigned, output: signed)
-        return signed
-    }
-
-    /// Looks for shortcuts matching the names this installer uses.
+    /// The UUIDs of the two shortcuts, if the user has created them.
     public static func findInstalled() -> (on: String?, off: String?) {
         let all = ShortcutsRunner.list()
         return (
             all.first { $0.name == onName }?.uuid,
             all.first { $0.name == offName }?.uuid
-        )
-    }
-
-    private static func sign(input: URL, output: URL) throws {
-        try? FileManager.default.removeItem(at: output)
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
-        // `anyone` rather than the default `people-who-know-me`, which would tie the
-        // signature to an iCloud identity the user may not have configured.
-        process.arguments = [
-            "sign", "-m", "anyone",
-            "-i", input.path,
-            "-o", output.path,
-        ]
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = FileHandle.nullDevice
-
-        try process.run()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: output.path) else {
-            let detail = String(data: errorData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown error"
-            throw InstallError.signingFailed(detail)
-        }
-    }
-
-    /// A single "Set Focus" action.
-    ///
-    /// The parameter shape is the whole ballgame, and it is counter-intuitive. The modern
-    /// Set Focus action reads *only* `FocusModes`:
-    ///
-    ///   - On:  `{ FocusModes: { Identifier, DisplayString } }`  → "Turn Do Not Disturb On until Turned Off"
-    ///   - Off: `{}` (empty)                                     → "Turn Do Not Disturb Off"
-    ///
-    /// The bug that cost days: adding an `Enabled` (or `OnValue`) key. `Enabled` is the
-    /// *legacy* action's on/off switch, and putting it alongside `FocusModes` makes the
-    /// modern action ignore both and fall back to Off — which is exactly the "both
-    /// shortcuts say Off" symptom. The fix is to send fewer keys, not more.
-    ///
-    /// Source: the Set Focus emitter in the Cherri shortcuts compiler
-    /// (electrikmilk/cherri, actions_std.go) and a committed real shortcut
-    /// (suliveevil/My-Siri-Shortcuts).
-    private static func plist(turnOn: Bool) throws -> Data {
-        let parameters: [String: Any] = turnOn
-            ? ["FocusModes": [
-                "Identifier": "com.apple.donotdisturb.mode.default",
-                "DisplayString": "Do Not Disturb",
-              ]]
-            : [:]
-
-        let action: [String: Any] = [
-            "WFWorkflowActionIdentifier": "is.workflow.actions.dnd.set",
-            "WFWorkflowActionParameters": parameters,
-        ]
-
-        let workflow: [String: Any] = [
-            "WFWorkflowClientVersion": "2607.1.2",
-            "WFWorkflowMinimumClientVersion": 900,
-            "WFWorkflowMinimumClientVersionString": "900",
-            "WFWorkflowIcon": [
-                // A real colour. -1 renders the tile white, which on the Shortcuts app's
-                // white background makes the shortcut look like it was never created.
-                "WFWorkflowIconStartColor": 463140863,
-                "WFWorkflowIconGlyphNumber": 61440,
-            ],
-            "WFWorkflowImportQuestions": [],
-            "WFWorkflowTypes": [],
-            "WFWorkflowInputContentItemClasses": [],
-            "WFWorkflowActions": [action],
-        ]
-
-        return try PropertyListSerialization.data(
-            fromPropertyList: workflow, format: .xml, options: 0
         )
     }
 }
