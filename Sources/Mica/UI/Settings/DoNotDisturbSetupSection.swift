@@ -2,24 +2,23 @@ import AppKit
 import MicaCore
 import SwiftUI
 
-/// Do Not Disturb: the feature toggle plus a short guide to create the two shortcuts it
-/// runs.
+/// Do Not Disturb: the feature toggle plus a compact, scannable setup.
 ///
-/// The setup is entirely manual and by design. macOS only turns Focus on through the
-/// Shortcuts "Set Focus" action, and that action works correctly only when created in the
-/// Shortcuts app — a generated copy imports broken. The saving grace is that "Set Focus"
-/// already defaults to "Do Not Disturb On until Turned Off", so the on-shortcut is just
-/// "add the action and name it". Mica detects the two shortcuts by name; it makes no
-/// claim about whether they work, because the honest test is the user seeing Focus turn
-/// on when Mica engages.
+/// Setup is manual by necessity — macOS only turns Focus on through the Shortcuts
+/// "Set Focus" action, and a generated copy imports broken. The UI keeps that from being a
+/// wall of text: two status rows show whether each shortcut exists, the how-to lives in a
+/// collapsible group, and the only verification is the user confirming the menu-bar moon,
+/// since Focus state can't be read reliably on macOS 26.
 struct DoNotDisturbSetupSection: View {
     @Bindable var environment: AppEnvironment
 
-    private enum Confirm: Equatable { case untested, testing, working, broken }
+    private enum Test: Equatable { case idle, running, passed, failed }
 
     @State private var onFound = false
     @State private var offFound = false
-    @State private var confirm: Confirm = .untested
+    @State private var test: Test = .idle
+    @State private var showSteps = false
+    @State private var askMoon = false
 
     private var preferences: Preferences { environment.preferences }
     private var ready: Bool { onFound && offFound }
@@ -31,95 +30,99 @@ struct DoNotDisturbSetupSection: View {
                 set: { preferences.setEnabled($0, for: .doNotDisturb); environment.enabledFeaturesDidChange() }
             ))
 
+            statusRow(ShortcutInstaller.onName, found: onFound)
+            statusRow(ShortcutInstaller.offName, found: offFound)
+
             if ready {
-                readyBody
+                testRow
             } else {
-                guide
+                DisclosureGroup("How to make them", isExpanded: $showSteps) {
+                    steps
+                }
+                HStack {
+                    Button("Open Shortcuts") { openShortcuts() }
+                    Spacer()
+                    Button("Re-check") { refresh() }
+                }
             }
         }
         .task { refresh() }
         .alert("Did the moon icon appear in your menu bar?", isPresented: $askMoon) {
-            Button("Yes, it worked") { finishTest(worked: true) }
-            Button("No", role: .cancel) { finishTest(worked: false) }
+            Button("Yes") { test = .passed; runOff() }
+            Button("No", role: .cancel) { test = .failed; runOff() }
         } message: {
             Text("That's how macOS shows Do Not Disturb is on.")
         }
     }
 
-    @ViewBuilder
-    private var readyBody: some View {
-        switch confirm {
-        case .untested:
-            Label("Both shortcuts found", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green).font(.callout)
-            Text("Test it once to be sure it works.")
-                .font(.caption).foregroundStyle(.secondary)
-            Button("Test It") { runTest() }
+    // MARK: - Rows
 
-        case .testing:
+    private func statusRow(_ name: String, found: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: found ? "checkmark.circle.fill" : "circle.dashed")
+                .foregroundStyle(found ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
+            Text(name)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(found ? .primary : .secondary)
+            Spacer()
+            if !found {
+                Text("Missing").font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var testRow: some View {
+        switch test {
+        case .idle:
+            HStack {
+                Text("Ready. Test it once to be sure.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                Button("Test") { runTest() }
+            }
+        case .running:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Turning Focus on — watch your menu bar…")
-                    .font(.callout).foregroundStyle(.secondary)
+                Text("Watch your menu bar…").font(.callout).foregroundStyle(.secondary)
             }
-
-        case .working:
+        case .passed:
             Label("Working", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green).font(.callout)
-
-        case .broken:
-            Text("If the moon didn't appear, the “On” shortcut isn't set to turn Do Not Disturb on. Open it in Shortcuts, delete it, and remake it — “Set Focus” defaults to the right thing.")
-                .font(.callout).foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Button("Open Shortcuts") { openShortcuts() }
-                Button("Test Again") { runTest() }
-            }
-        }
-    }
-
-    private var guide: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("macOS only lets an app change Focus through a Shortcut. Make these two once — it takes about a minute.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            shortcutRow(
-                found: onFound,
-                name: ShortcutInstaller.onName,
-                detail: "Add the “Set Focus” action. It already reads “Do Not Disturb On until Turned Off” — leave it. Name the shortcut exactly this."
-            )
-            shortcutRow(
-                found: offFound,
-                name: ShortcutInstaller.offName,
-                detail: "Add “Set Focus”, click “On” and change it to “Off”. Name it exactly this."
-            )
-
-            HStack {
-                Button("Open Shortcuts") { openShortcuts() }
-                Button("I Made Them") { refresh() }
-            }
-            .padding(.top, 2)
-        }
-    }
-
-    private func shortcutRow(found: Bool, name: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: found ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(found ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
-                .font(.callout)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.callout.weight(.medium))
-                if !found {
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        case .failed:
+            VStack(alignment: .leading, spacing: 6) {
+                Text("The “On” shortcut didn't turn Focus on. Delete it and remake it — “Set Focus” already defaults to the right setting.")
+                    .font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Open Shortcuts") { openShortcuts() }
+                    Button("Test Again") { runTest() }
                 }
             }
         }
     }
 
-    @State private var askMoon = false
+    private var steps: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            step(1, "In Shortcuts, make a new shortcut and add the **Set Focus** action.")
+            step(2, "It already reads *Do Not Disturb, On*. Name it **\(ShortcutInstaller.onName)**.")
+            step(3, "Make another, switch it to *Off*, name it **\(ShortcutInstaller.offName)**.")
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func step(_ n: Int, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("\(n)")
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14, alignment: .trailing)
+            Text(.init(text)).font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Actions
 
     private func refresh() {
         Task {
@@ -128,29 +131,27 @@ struct DoNotDisturbSetupSection: View {
             preferences.dndShortcutOffID = installed.off
             onFound = installed.on != nil
             offFound = installed.off != nil
+            showSteps = !ready
+            if !ready { test = .idle }
             environment.enabledFeaturesDidChange()
         }
     }
 
-    /// The only honest test: run the on-shortcut and let the user's own eyes confirm the
-    /// menu-bar moon. Reading Focus state from outside the app has proven unreliable on
-    /// macOS 26, so the human is the oracle.
+    /// The only honest check on macOS 26: run the on-shortcut and let the user's own eyes
+    /// confirm the menu-bar moon. Focus state can't be read reliably from outside the app.
     private func runTest() {
         guard let onID = preferences.dndShortcutOnID else { return }
-        confirm = .testing
+        test = .running
         Task {
             _ = await Task.detached { ShortcutsRunner.run(uuid: onID) }.value
-            // Give the menu-bar indicator a moment to appear before asking.
             try? await Task.sleep(for: .seconds(1))
             askMoon = true
         }
     }
 
-    private func finishTest(worked: Bool) {
-        confirm = worked ? .working : .broken
-        if let offID = preferences.dndShortcutOffID {
-            Task { _ = await Task.detached { ShortcutsRunner.run(uuid: offID) }.value }
-        }
+    private func runOff() {
+        guard let offID = preferences.dndShortcutOffID else { return }
+        Task { _ = await Task.detached { ShortcutsRunner.run(uuid: offID) }.value }
     }
 
     private func openShortcuts() {
