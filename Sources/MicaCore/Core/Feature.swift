@@ -76,11 +76,33 @@ public nonisolated enum Feature: String, CaseIterable, Codable, Sendable, Identi
 public nonisolated enum HideWindowsScope: String, CaseIterable, Codable, Sendable {
     case all
     case exceptFrontmost
+    /// Hide only a chosen set — everything else stays on screen.
+    case onlySelected
+    /// Hide everything but a chosen set.
+    case allExceptSelected
 
     public var displayName: String {
         switch self {
         case .all: "All windows"
         case .exceptFrontmost: "All except frontmost"
+        case .onlySelected: "Only these apps"
+        case .allExceptSelected: "All except these apps"
+        }
+    }
+
+    /// Whether this scope reads the user's chosen app list.
+    public var usesAppList: Bool {
+        switch self {
+        case .all, .exceptFrontmost: false
+        case .onlySelected, .allExceptSelected: true
+        }
+    }
+
+    public var listCaption: String {
+        switch self {
+        case .onlySelected: "Hide only these apps:"
+        case .allExceptSelected: "Hide everything except these apps:"
+        case .all, .exceptFrontmost: ""
         }
     }
 }

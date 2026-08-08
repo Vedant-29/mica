@@ -110,6 +110,18 @@ struct FeaturesSettingsView: View {
                         }
                         .pickerStyle(.radioGroup)
                         .padding(.leading, 20)
+
+                        if preferences.hideWindowsScope.usesAppList {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(preferences.hideWindowsScope.listCaption)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                AppListEditor(store: environment.windowApps, showsAction: false) {
+                                    environment.settingsDidChange()
+                                }
+                            }
+                            .padding(.leading, 20)
+                        }
                     }
 
                     if let reason = environment.coordinator.effects[feature]?.unavailableReason {

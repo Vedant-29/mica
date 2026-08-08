@@ -49,12 +49,8 @@ public final class WindowsEffect: PrivacyEffect {
     }
 
     /// The applications that would be hidden right now.
-    private func targets(options: EffectOptions) -> [NSRunningApplication] {
+    static func targets(options: EffectOptions) -> [NSRunningApplication] {
         let me = NSRunningApplication.current.processIdentifier
-        let exempt: String? = switch options.hideWindowsScope {
-        case .all: nil
-        case .exceptFrontmost: FrontmostTracker.shared.lastFrontmostBundleID
-        }
 
         return NSWorkspace.shared.runningApplications.filter { app in
             // `.regular` only: accessory and background apps have no windows to hide, and
@@ -63,8 +59,25 @@ public final class WindowsEffect: PrivacyEffect {
             // Only what is currently visible, which is what makes restore exact.
             guard !app.isHidden else { return false }
             guard app.processIdentifier != me else { return false }
-            if let exempt, app.bundleIdentifier == exempt { return false }
-            return true
+
+            switch options.hideWindowsScope {
+            case .all:
+                return true
+            case .exceptFrontmost:
+                return app.bundleIdentifier != FrontmostTracker.shared.lastFrontmostBundleID
+            case .onlySelected:
+                guard let id = app.bundleIdentifier else { return false }
+                return options.selectedWindowApps.contains(id)
+            case .allExceptSelected:
+                // An app with no bundle identifier can't be matched against the list, so
+                // it falls through to being hidden — the privacy-preserving default.
+                guard let id = app.bundleIdentifier else { return true }
+                return !options.selectedWindowApps.contains(id)
+            }
         }
+    }
+
+    private func targets(options: EffectOptions) -> [NSRunningApplication] {
+        Self.targets(options: options)
     }
 }

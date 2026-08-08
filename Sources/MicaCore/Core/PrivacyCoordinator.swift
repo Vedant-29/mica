@@ -29,14 +29,22 @@ public final class PrivacyCoordinator {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var chain: Task<Void, Never>?
 
+    /// Supplies the current `EffectOptions`.
+    ///
+    /// A closure rather than reading `Preferences` directly, because some options draw on
+    /// file-backed app lists the coordinator has no business knowing about.
+    @ObservationIgnored private let makeOptions: () -> EffectOptions
+
     public init(
         preferences: Preferences,
         effects: [Feature: any AnyPrivacyEffect],
-        store: SnapshotStore = .shared
+        store: SnapshotStore = .shared,
+        makeOptions: @escaping () -> EffectOptions
     ) {
         self.preferences = preferences
         self.effects = effects
         self.store = store
+        self.makeOptions = makeOptions
     }
 
     // MARK: - Intent
@@ -69,7 +77,7 @@ public final class PrivacyCoordinator {
     // MARK: - Reconciliation
 
     private func reconcile(generation: Int) async {
-        let options = EffectOptions(hideWindowsScope: preferences.hideWindowsScope)
+        let options = makeOptions()
 
         let wanted: Set<Feature> = target
             ? Set(Feature.allCases.filter { preferences.isEnabled($0) && effects[$0]?.isAvailable == true })

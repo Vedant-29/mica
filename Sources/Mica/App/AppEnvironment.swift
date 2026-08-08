@@ -20,6 +20,8 @@ final class AppEnvironment {
 
     let triggerApps = AppListStore(filename: "TriggerApps.json")
     let excludedApps = AppListStore(filename: "ExcludedApps.json")
+    /// Apps chosen for the two list-based Hide Active Windows scopes.
+    let windowApps = AppListStore(filename: "WindowApps.json")
 
     @ObservationIgnored private let menuBarIcons = MenuBarIconsEffect()
     @ObservationIgnored private let doNotDisturbMonitor = DoNotDisturbMonitor()
@@ -43,7 +45,13 @@ final class AppEnvironment {
             },
         ]
 
-        let coordinator = PrivacyCoordinator(preferences: preferences, effects: effects)
+        let windowApps = self.windowApps
+        let coordinator = PrivacyCoordinator(preferences: preferences, effects: effects) {
+            EffectOptions(
+                hideWindowsScope: preferences.hideWindowsScope,
+                selectedWindowApps: windowApps.bundleIDs()
+            )
+        }
         self.coordinator = coordinator
         self.engagement = EngagementController(
             preferences: preferences,

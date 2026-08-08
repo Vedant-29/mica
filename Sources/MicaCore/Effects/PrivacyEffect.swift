@@ -3,9 +3,15 @@ import Foundation
 /// Per-feature settings an effect needs in order to decide what to do.
 public nonisolated struct EffectOptions: Equatable, Sendable {
     public var hideWindowsScope: HideWindowsScope
+    /// The apps chosen for the two list-based scopes. Ignored by the others.
+    public var selectedWindowApps: Set<String>
 
-    public init(hideWindowsScope: HideWindowsScope = .all) {
+    public init(
+        hideWindowsScope: HideWindowsScope = .all,
+        selectedWindowApps: Set<String> = []
+    ) {
         self.hideWindowsScope = hideWindowsScope
+        self.selectedWindowApps = selectedWindowApps
     }
 }
 

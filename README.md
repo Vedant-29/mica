@@ -14,7 +14,7 @@ Built for my own machine, as a replacement for [Stealthly](https://stealthly.app
 | | |
 |---|---|
 | **Do Not Disturb** | Silences notifications for the duration |
-| **Hide Active Windows** | All windows, or all except the frontmost |
+| **Hide Active Windows** | All windows, all except the frontmost, only apps you pick, or everything except apps you pick |
 | **Hide Dock** | |
 | **Hide Menu Bar Icons** | Everything left of Mica's `‹` indicator |
 | **Hide Wallpaper** | |
