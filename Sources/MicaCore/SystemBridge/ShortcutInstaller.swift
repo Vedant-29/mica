@@ -95,25 +95,19 @@ public nonisolated enum ShortcutInstaller {
     /// current. If a future macOS changes the parameter shape, the action still imports
     /// and stays editable in the Shortcuts app — which is why Settings offers a test.
     private static func plist(turnOn: Bool) throws -> Data {
-        // The on/off value is an integer, not a boolean.
-        //
-        // This is load bearing and counter-intuitive. Written as an integer the action
-        // runs correctly, but the Shortcuts *editor* doesn't understand that form and
-        // draws the picker as "Off" regardless. Written as a boolean the editor is no
-        // better and the action stops working altogether, which is how a previous
-        // attempt to "fix" the display regressed the feature.
+        // On/off is the `Enabled` boolean; the lifetime is left unset, which the
+        // Set Focus action renders as "until Turned Off" — exactly the form that works
+        // when built by hand in the Shortcuts app. An earlier attempt used an `OnValue`
+        // integer, which the action ignored and left at its "Off" default.
         //
         // None of this is verifiable from outside the app: the Shortcuts library is
-        // TCC-protected and signed shortcut files are encrypted archives, so there is no
-        // way to inspect what got imported. That is exactly why the setup runs the
-        // shortcut and watches for the Focus change instead of trusting it.
-        //
-        // Consequence worth knowing: opening the generated shortcut in the editor and
-        // saving it will rewrite the action to whatever the picker shows, breaking it.
+        // TCC-protected and signed shortcut files are encrypted archives. That is why the
+        // setup runs the shortcut and checks the Focus daemon's log rather than trusting
+        // that the import produced a working action.
         let action: [String: Any] = [
             "WFWorkflowActionIdentifier": "is.workflow.actions.dnd.set",
             "WFWorkflowActionParameters": [
-                "OnValue": turnOn ? 1 : 0,
+                "Enabled": turnOn,
                 "FocusModes": [
                     "Identifier": "com.apple.donotdisturb.mode.default",
                     "DisplayString": "Do Not Disturb",

@@ -2,33 +2,27 @@ import AppKit
 import MicaCore
 import SwiftUI
 
-/// Do Not Disturb: the feature toggle and its one-time setup, together.
+/// Do Not Disturb: the feature toggle plus its one-time setup.
 ///
 /// macOS has no API a third-party app can call to change Focus, so Mica runs a Shortcut
-/// from the user's own library.
-///
-/// The setup verifies itself. A generated shortcut can import perfectly and still do
-/// nothing if the action parameters aren't what this macOS expects, and that failure is
-/// invisible: the Shortcuts library is TCC-protected and signed shortcut files are
-/// encrypted, so Mica cannot inspect what actually got imported. Running it and watching
-/// for the Focus change is the only way to know, so it happens automatically rather than
-/// waiting for the user to think of pressing Test.
+/// from the user's library. Setup is confirmed by running the shortcut and checking the
+/// Focus daemon's log — the one detection method that works on macOS 26 — rather than by
+/// trusting the import, which can silently produce a shortcut that does nothing.
 struct DoNotDisturbSetupSection: View {
     @Bindable var environment: AppEnvironment
 
     private enum Step: Equatable {
-        case needsSetup
+        case checking
+        case notReady
         case creating
         case waitingForUser
-        case checking
+        case verifying
         case ready
-        case needsManualFix
-        case failed(String)
+        case notWorking
     }
 
-    @State private var step: Step = .needsSetup
-    @State private var isTesting = false
-    @State private var hasDuplicates = false
+    @State private var step: Step = .checking
+    @State private var showManualSteps = false
 
     private var preferences: Preferences { environment.preferences }
 
@@ -40,11 +34,19 @@ struct DoNotDisturbSetupSection: View {
             ))
 
             switch step {
-            case .needsSetup:
-                Text("macOS only lets apps change Focus through a Shortcut. Mica will make two, one to turn Do Not Disturb on and one to turn it off.")
+            case .checking:
+                progress("Checking setup.")
+
+            case .notReady:
+                Text("macOS only lets apps change Focus through a Shortcut. Set one up once:")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                Button("Set Up") { beginSetup() }
+                Button("Create Automatically") { createAutomatically() }
+                Button(showManualSteps ? "Hide Manual Steps" : "Create Manually") {
+                    showManualSteps.toggle()
+                }
+                .buttonStyle(.link)
+                if showManualSteps { manualSteps }
 
             case .creating:
                 progress("Making the shortcuts, this takes a few seconds.")
@@ -52,52 +54,44 @@ struct DoNotDisturbSetupSection: View {
             case .waitingForUser:
                 Text("Shortcuts opened twice, once for each. Click Add Shortcut in both, then come back.")
                     .font(.callout)
-                Button("I Added Them") { confirmAndVerify() }
-                Button("Cancel") { step = .needsSetup }
+                Button("I Added Them") { locateThenVerify() }
+                Button("Cancel") { step = .notReady }
                     .buttonStyle(.link)
 
-            case .checking:
-                progress("Checking that they work.")
+            case .verifying:
+                progress("Turning Do Not Disturb on and off to confirm it works.")
 
             case .ready:
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                     Text("Ready").font(.callout)
                 }
-                HStack {
-                    Button(isTesting ? "Testing" : "Test Again") { verify() }
-                        .disabled(isTesting)
-                    Button("Make Again") { step = .needsSetup }
-                }
-                if hasDuplicates {
-                    Text("There is more than one shortcut with these names. Delete the extras in Shortcuts, otherwise Mica may run the wrong one.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Button("Test Again") { verify() }
 
-            case .needsManualFix:
-                Text("The shortcuts were added but didn't change Focus. One thing to fix:")
+            case .notWorking:
+                Text("The shortcut was added but didn't turn Focus on. Fix it in one step:")
                     .font(.callout)
-                Text("In Shortcuts, open **\(ShortcutInstaller.onName)** and change **Off** to **On**.")
+                Text("In Shortcuts, open **\(ShortcutInstaller.onName)** and make it read **Turn Do Not Disturb On until Turned Off** — the state must be **On**, not Off.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    Button("Open Shortcuts") { openShortcutsApp() }
-                    Button(isTesting ? "Checking" : "Check Again") { verify() }
-                        .disabled(isTesting)
+                    Button("Open Shortcuts") { openShortcuts() }
+                    Button("Check Again") { verify() }
                 }
+            }
 
-            case .failed(let message):
-                Text(message)
-                    .font(.callout)
+            if hasDuplicateShortcuts {
+                Text("More than one shortcut has these names. Delete the extras in Shortcuts so Mica runs the right one.")
+                    .font(.caption)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Try Again") { beginSetup() }
             }
         }
-        .task { refresh() }
+        .task { await initialCheck() }
     }
+
+    // MARK: - Pieces
 
     private func progress(_ message: String) -> some View {
         HStack(spacing: 8) {
@@ -106,21 +100,57 @@ struct DoNotDisturbSetupSection: View {
         }
     }
 
+    private var manualSteps: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            step("1.", "Open Shortcuts and click + for a new shortcut.")
+            step("2.", "Search for “Set Focus” and add it.")
+            step("3.", "Make it read “Turn Do Not Disturb On until Turned Off”.")
+            step("4.", "Name it exactly **\(ShortcutInstaller.onName)**.")
+            step("5.", "Make a second one set to **Off**, named **\(ShortcutInstaller.offName)**.")
+            HStack {
+                Button("Open Shortcuts") { openShortcuts() }
+                Button("I Made Them") { locateThenVerify() }
+            }
+            .padding(.top, 2)
+        }
+        .padding(.top, 4)
+    }
+
+    private func step(_ number: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(number).font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
+            Text(.init(text)).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
     // MARK: - Flow
 
-    private func beginSetup() {
+    @State private var hasDuplicateShortcuts = false
+
+    private func initialCheck() async {
+        await locate()
+        if preferences.dndShortcutOnID != nil, preferences.dndShortcutOffID != nil {
+            // Shortcuts exist from a previous session. Trust them rather than toggling
+            // Focus on every visit to the tab; the user can Test Again if unsure.
+            step = .ready
+        } else {
+            step = .notReady
+        }
+    }
+
+    private func createAutomatically() {
         step = .creating
         Task {
             do {
                 try await ShortcutInstaller.install()
                 step = .waitingForUser
             } catch {
-                step = .failed(String(describing: error))
+                step = .notReady
             }
         }
     }
 
-    private func confirmAndVerify() {
+    private func locateThenVerify() {
         Task {
             await locate()
             guard preferences.dndShortcutOnID != nil, preferences.dndShortcutOffID != nil else {
@@ -135,63 +165,31 @@ struct DoNotDisturbSetupSection: View {
         Task { await runVerification() }
     }
 
-    /// Turns Focus on, watches for the change, then puts it back.
     private func runVerification() async {
         guard let onID = preferences.dndShortcutOnID,
               let offID = preferences.dndShortcutOffID else { return }
-
-        isTesting = true
-        step = .checking
-        let monitor = environment.engagement.doNotDisturb
-
-        // Start from a known state, otherwise "already on" reads as a failure.
-        _ = await Task.detached { ShortcutsRunner.run(uuid: offID) }.value
-        try? await Task.sleep(for: .seconds(1))
-
-        let ran = await Task.detached { ShortcutsRunner.run(uuid: onID) }.value
-        try? await Task.sleep(for: .seconds(1, milliseconds: 500))
-        let turnedOn = monitor.isEnabled == true
-
-        _ = await Task.detached { ShortcutsRunner.run(uuid: offID) }.value
-        try? await Task.sleep(for: .seconds(1))
-
-        step = (ran && turnedOn) ? .ready : .needsManualFix
-        isTesting = false
-    }
-
-    private func refresh() {
-        Task {
-            await locate()
-            let configured = preferences.dndShortcutOnID != nil && preferences.dndShortcutOffID != nil
-            if configured, step == .needsSetup {
-                // Already set up from a previous run; trust it rather than re-testing on
-                // every visit to the tab, which would flick Focus on and off each time.
-                step = .ready
-            }
-        }
+        step = .verifying
+        let worked = await DNDActivationCheck.verify(onID: onID, offID: offID)
+        // Keep the in-session state honest for engage/release.
+        environment.engagement.doNotDisturb.noteChangedByMica(to: false)
+        step = worked ? .ready : .notWorking
     }
 
     private func locate() async {
         let all = await Task.detached { ShortcutsRunner.list() }.value
-        hasDuplicates = all.filter { $0.name == ShortcutInstaller.onName }.count > 1
+        hasDuplicateShortcuts = all.filter { $0.name == ShortcutInstaller.onName }.count > 1
             || all.filter { $0.name == ShortcutInstaller.offName }.count > 1
 
         let installed = await Task.detached { ShortcutInstaller.findInstalled() }.value
-        if let on = installed.on { preferences.dndShortcutOnID = on }
-        if let off = installed.off { preferences.dndShortcutOffID = off }
+        preferences.dndShortcutOnID = installed.on
+        preferences.dndShortcutOffID = installed.off
         environment.enabledFeaturesDidChange()
     }
 
-    private func openShortcutsApp() {
+    private func openShortcuts() {
         guard let url = NSWorkspace.shared.urlForApplication(
             withBundleIdentifier: "com.apple.shortcuts"
         ) else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: .init())
-    }
-}
-
-extension Duration {
-    fileprivate static func seconds(_ whole: Int, milliseconds: Int) -> Duration {
-        .milliseconds(whole * 1000 + milliseconds)
     }
 }
