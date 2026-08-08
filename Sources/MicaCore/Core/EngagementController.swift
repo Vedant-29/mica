@@ -19,7 +19,6 @@ public final class EngagementController {
     @ObservationIgnored private let coordinator: PrivacyCoordinator
     @ObservationIgnored public let triggerApps: AppListStore
     @ObservationIgnored public let excludedApps: AppListStore
-    @ObservationIgnored public let doNotDisturb: DoNotDisturbMonitor
     @ObservationIgnored private let notifier: ReminderNotifier
 
     @ObservationIgnored private var screenCapture: ScreenCaptureMonitor?
@@ -39,14 +38,12 @@ public final class EngagementController {
         coordinator: PrivacyCoordinator,
         triggerApps: AppListStore,
         excludedApps: AppListStore,
-        doNotDisturb: DoNotDisturbMonitor,
         notifier: ReminderNotifier
     ) {
         self.preferences = preferences
         self.coordinator = coordinator
         self.triggerApps = triggerApps
         self.excludedApps = excludedApps
-        self.doNotDisturb = doNotDisturb
         self.notifier = notifier
     }
 
@@ -59,8 +56,6 @@ public final class EngagementController {
         releaseDebouncer = EdgeDebouncer(risingDelay: 0, fallingDelay: 1.5) { [weak self] engaged in
             self?.coordinator.setEngaged(engaged)
         }
-
-        doNotDisturb.start()
 
         let screenCapture = ScreenCaptureMonitor { [weak self] _ in self?.evaluate() }
         screenCapture.start()
@@ -105,7 +100,6 @@ public final class EngagementController {
         display?.stop()
         runningApps?.stop()
         schedule?.stop()
-        doNotDisturb.stop()
     }
 
     // MARK: - User intent

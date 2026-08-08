@@ -1,66 +1,62 @@
 import Foundation
 
-/// Turns Do Not Disturb on while engaged.
+/// Turns Do Not Disturb on while engaged, off when released.
 ///
-/// The only effect that needs one-time setup, because macOS exposes no way for a
-/// third-party app to set Focus. The user creates two Shortcuts once; Mica runs them.
+/// macOS gives a third-party app no way to set Focus except by running a Shortcut, so
+/// that is all this does: run the on-shortcut to engage, the off-shortcut to release.
+///
+/// It deliberately does not try to read the current Focus state. There is no reliable,
+/// permission-free way to do that on macOS 26 (the old notifications are dead, the private
+/// service is entitlement-gated, and the state file needs Full Disk Access), and the
+/// feature doesn't need it: engage turns Focus on, release turns it off. The only
+/// consequence is that if Do Not Disturb was already on before Mica engaged, releasing
+/// turns it off — an acceptable, predictable trade for not depending on a broken API.
 public final class DoNotDisturbEffect: PrivacyEffect {
 
-    public nonisolated struct PriorState: Codable, Equatable, Sendable {
-        public var wasEnabled: Bool
-    }
+    /// Empty: there is no prior state to restore, because release always simply turns
+    /// Focus off. Kept as a type so the effect still fits the crash-safe snapshot, whose
+    /// job here is just to run the off-shortcut on recovery.
+    public typealias PriorState = NoPriorState
 
     public let feature = Feature.doNotDisturb
 
-    private let monitor: DoNotDisturbMonitor
     private let shortcutIDs: () -> (on: String?, off: String?)
 
-    public init(monitor: DoNotDisturbMonitor, shortcutIDs: @escaping () -> (on: String?, off: String?)) {
-        self.monitor = monitor
+    public init(shortcutIDs: @escaping () -> (on: String?, off: String?)) {
         self.shortcutIDs = shortcutIDs
     }
 
     public var unavailableReason: String? {
         guard ShortcutsRunner.isAvailable else {
-            return "The Shortcuts command line tool isn't available on this Mac."
+            return "The Shortcuts app isn't available on this Mac."
         }
         let ids = shortcutIDs()
         guard ids.on != nil, ids.off != nil else {
-            return "Do Not Disturb needs a one-time setup. Open Settings → Features to finish it."
+            return "Set up Do Not Disturb in Settings to use it."
         }
         return nil
     }
 
-    public func capturePriorState(options: EffectOptions) throws -> PriorState {
-        PriorState(wasEnabled: monitor.isEnabled ?? false)
-    }
+    public func capturePriorState(options: EffectOptions) throws -> PriorState { NoPriorState() }
 
     public func apply(desired: Bool, prior: PriorState?, options: EffectOptions) async throws {
-        // Releasing restores what was there before, which may well have been "on" if the
-        // user had a Focus running already — in that case Mica must leave it alone.
-        let target = desired ? true : (prior?.wasEnabled ?? false)
-        guard monitor.isEnabled != target else { return }
-
         let ids = shortcutIDs()
-        guard let uuid = target ? ids.on : ids.off else {
+        guard let uuid = desired ? ids.on : ids.off else {
             throw EffectError.unavailable(feature, reason: "no shortcut configured")
         }
-
         // Off the main actor: this spawns a process and waits for it, and blocking the
-        // main thread here would freeze the popover mid-engage.
+        // main thread would freeze the popover mid-engage.
         let succeeded = await Task.detached { ShortcutsRunner.run(uuid: uuid) }.value
         guard succeeded else {
             throw EffectError.failed(feature, reason: "the Do Not Disturb shortcut didn't run")
         }
-        monitor.noteChangedByMica(to: target)
     }
 
     public func emergencyRestore(prior: PriorState) {
-        guard !prior.wasEnabled, monitor.isEnabled != false else { return }
+        // Being left silenced is the most user-visible way this app can fail, so this is
+        // worth a subprocess despite the usual "no spawning during teardown" rule. The
+        // short timeout keeps it from stalling shutdown.
         guard let uuid = shortcutIDs().off else { return }
-        // Contrary to the usual "no subprocesses in an emergency restore" rule, this one
-        // is worth attempting: being left permanently silenced is the most user-visible
-        // way this app can fail. The timeout is short so it can't stall shutdown.
         _ = ShortcutsRunner.run(uuid: uuid, timeout: 3)
     }
 }

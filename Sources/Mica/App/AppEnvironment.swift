@@ -27,7 +27,6 @@ final class AppEnvironment {
     @ObservationIgnored lazy var settingsWindow = SettingsWindowController(environment: self)
 
     @ObservationIgnored private let menuBarIcons = MenuBarIconsEffect()
-    @ObservationIgnored private let doNotDisturbMonitor = DoNotDisturbMonitor()
     @ObservationIgnored private let signalTrap = SignalTrap()
     /// Exposed so Settings can explain when the built-in banner is standing in for
     /// system notifications.
@@ -36,14 +35,13 @@ final class AppEnvironment {
     init(preferences: Preferences = .shared) {
         self.preferences = preferences
 
-        let dndMonitor = doNotDisturbMonitor
         let effects: [Feature: any AnyPrivacyEffect] = [
             .hideDock: DockEffect(),
             .hideWindows: WindowsEffect(),
             .hideDesktopItems: DesktopItemsEffect(),
             .hideWallpaper: WallpaperEffect(),
             .hideMenuBarIcons: menuBarIcons,
-            .doNotDisturb: DoNotDisturbEffect(monitor: dndMonitor) {
+            .doNotDisturb: DoNotDisturbEffect {
                 (preferences.dndShortcutOnID, preferences.dndShortcutOffID)
             },
         ]
@@ -61,7 +59,6 @@ final class AppEnvironment {
             coordinator: coordinator,
             triggerApps: triggerApps,
             excludedApps: excludedApps,
-            doNotDisturb: dndMonitor,
             notifier: notifier
         )
     }

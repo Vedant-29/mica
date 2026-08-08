@@ -90,29 +90,31 @@ public nonisolated enum ShortcutInstaller {
 
     /// A single "Set Focus" action.
     ///
-    /// `FocusModes` names Do Not Disturb explicitly rather than relying on the action's
-    /// default, so it doesn't silently target whichever Focus the system considers
-    /// current. If a future macOS changes the parameter shape, the action still imports
-    /// and stays editable in the Shortcuts app — which is why Settings offers a test.
+    /// The parameter shape is the whole ballgame, and it is counter-intuitive. The modern
+    /// Set Focus action reads *only* `FocusModes`:
+    ///
+    ///   - On:  `{ FocusModes: { Identifier, DisplayString } }`  → "Turn Do Not Disturb On until Turned Off"
+    ///   - Off: `{}` (empty)                                     → "Turn Do Not Disturb Off"
+    ///
+    /// The bug that cost days: adding an `Enabled` (or `OnValue`) key. `Enabled` is the
+    /// *legacy* action's on/off switch, and putting it alongside `FocusModes` makes the
+    /// modern action ignore both and fall back to Off — which is exactly the "both
+    /// shortcuts say Off" symptom. The fix is to send fewer keys, not more.
+    ///
+    /// Source: the Set Focus emitter in the Cherri shortcuts compiler
+    /// (electrikmilk/cherri, actions_std.go) and a committed real shortcut
+    /// (suliveevil/My-Siri-Shortcuts).
     private static func plist(turnOn: Bool) throws -> Data {
-        // On/off is the `Enabled` boolean; the lifetime is left unset, which the
-        // Set Focus action renders as "until Turned Off" — exactly the form that works
-        // when built by hand in the Shortcuts app. An earlier attempt used an `OnValue`
-        // integer, which the action ignored and left at its "Off" default.
-        //
-        // None of this is verifiable from outside the app: the Shortcuts library is
-        // TCC-protected and signed shortcut files are encrypted archives. That is why the
-        // setup runs the shortcut and checks the Focus daemon's log rather than trusting
-        // that the import produced a working action.
+        let parameters: [String: Any] = turnOn
+            ? ["FocusModes": [
+                "Identifier": "com.apple.donotdisturb.mode.default",
+                "DisplayString": "Do Not Disturb",
+              ]]
+            : [:]
+
         let action: [String: Any] = [
             "WFWorkflowActionIdentifier": "is.workflow.actions.dnd.set",
-            "WFWorkflowActionParameters": [
-                "Enabled": turnOn,
-                "FocusModes": [
-                    "Identifier": "com.apple.donotdisturb.mode.default",
-                    "DisplayString": "Do Not Disturb",
-                ],
-            ],
+            "WFWorkflowActionParameters": parameters,
         ]
 
         let workflow: [String: Any] = [
