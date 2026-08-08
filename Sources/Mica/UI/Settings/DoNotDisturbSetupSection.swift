@@ -42,6 +42,7 @@ struct DoNotDisturbSetupSection: View {
                 Text("Click Add Shortcut in each window that opened, then:")
                     .font(.callout)
                 Button("Done") { verify() }
+                labelQuirkNote
 
             case .verifying:
                 busy("Testing")
@@ -49,6 +50,7 @@ struct DoNotDisturbSetupSection: View {
             case .ready:
                 Label("Ready", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green).font(.callout)
+                labelQuirkNote
 
             case .notWorking:
                 Text("The shortcut didn't turn Focus on. Open it in Shortcuts and make sure it reads “Turn Do Not Disturb On”, then check again.")
@@ -68,6 +70,17 @@ struct DoNotDisturbSetupSection: View {
             ProgressView().controlSize(.small)
             Text(text).font(.callout).foregroundStyle(.secondary)
         }
+    }
+
+    /// Pre-empts the single biggest source of confusion here. The Shortcuts editor
+    /// mislabels this action as "Turn Do Not Disturb Off" even though it turns Focus on —
+    /// a cosmetic quirk of how it re-renders the action. Mica confirms the real behaviour
+    /// against the Focus daemon, so the label can be safely ignored.
+    private var labelQuirkNote: some View {
+        Text("The Shortcuts app may show this as “Off” — that's a display glitch in Shortcuts. Mica checks that it really turns Focus on.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Flow
