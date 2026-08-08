@@ -51,9 +51,13 @@ struct PopoverRootView: View {
                     feature: feature,
                     isEnabled: preferences.isEnabled(feature),
                     // A failing effect says so on its own row rather than failing silently
-                    // or taking the other five down with it.
-                    problem: environment.coordinator.errors[feature]
-                        ?? environment.coordinator.effects[feature]?.unavailableReason
+                    // or taking the other five down with it — but only once you've asked
+                    // for it. Warning about a feature that's switched off is just noise,
+                    // and it reads as though something is broken when nothing is.
+                    problem: preferences.isEnabled(feature)
+                        ? environment.coordinator.errors[feature]
+                            ?? environment.coordinator.effects[feature]?.unavailableReason
+                        : nil
                 ) {
                     preferences.setEnabled(!preferences.isEnabled(feature), for: feature)
                     environment.enabledFeaturesDidChange()
