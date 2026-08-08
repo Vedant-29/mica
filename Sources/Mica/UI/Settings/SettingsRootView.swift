@@ -100,7 +100,6 @@ struct FeaturesSettingsView: View {
                 ForEach(simpleFeatures) { feature in
                     Toggle(feature.displayName, isOn: binding(for: feature))
                 }
-                Toggle(Feature.doNotDisturb.displayName, isOn: binding(for: .doNotDisturb))
             }
 
             DoNotDisturbSetupSection(environment: environment)

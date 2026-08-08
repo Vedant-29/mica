@@ -23,21 +23,33 @@ public nonisolated enum ShortcutInstaller {
     }
 
     /// Writes, signs, and opens both shortcuts. The user confirms each with Add Shortcut.
-    public static func install() throws {
+    ///
+    /// Signing is the slow part at roughly four seconds each, so the two run concurrently
+    /// rather than back to back.
+    public static func install() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "Mica-Shortcuts", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        for (name, turnOn) in [(onName, true), (offName, false)] {
-            // The imported shortcut takes its name from the file, so the file has to be
-            // named exactly what we later look for in `shortcuts list`.
-            let unsigned = directory.appending(path: "\(name).unsigned.shortcut")
-            let signed = directory.appending(path: "\(name).shortcut")
+        async let on = prepare(name: onName, turnOn: true, in: directory)
+        async let off = prepare(name: offName, turnOn: false, in: directory)
+        let urls = try await [on, off]
 
-            try plist(turnOn: turnOn).write(to: unsigned)
-            try sign(input: unsigned, output: signed)
-            NSWorkspace.shared.open(signed)
+        // Opened On first so the two Shortcuts sheets arrive in the order the UI
+        // describes them.
+        await MainActor.run {
+            for url in urls { NSWorkspace.shared.open(url) }
         }
+    }
+
+    private static func prepare(name: String, turnOn: Bool, in directory: URL) throws -> URL {
+        // The imported shortcut takes its name from the file, so the file has to be named
+        // exactly what we later look for in `shortcuts list`.
+        let unsigned = directory.appending(path: "\(name).unsigned.shortcut")
+        let signed = directory.appending(path: "\(name).shortcut")
+        try plist(turnOn: turnOn).write(to: unsigned)
+        try sign(input: unsigned, output: signed)
+        return signed
     }
 
     /// Looks for shortcuts matching the names this installer uses.
@@ -100,7 +112,9 @@ public nonisolated enum ShortcutInstaller {
             "WFWorkflowMinimumClientVersion": 900,
             "WFWorkflowMinimumClientVersionString": "900",
             "WFWorkflowIcon": [
-                "WFWorkflowIconStartColor": -1,
+                // A real colour. -1 renders the tile white, which on the Shortcuts app's
+                // white background makes the shortcut look like it was never created.
+                "WFWorkflowIconStartColor": 463140863,
                 "WFWorkflowIconGlyphNumber": 61440,
             ],
             "WFWorkflowImportQuestions": [],
