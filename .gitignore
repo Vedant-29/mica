@@ -5,3 +5,4 @@ DerivedData/
 *.iconset/
 Resources/AppIcon.icns
 .DS_Store
+Local.mk

@@ -7,7 +7,7 @@ recorded — Mica silences notifications, hides your open windows, the Dock, you
 icons, your wallpaper, and your desktop icons and widgets. When the call ends, it puts
 everything back exactly as it was.
 
-Built for my own machine, as a replacement for [Stealthly](https://stealthly.app/).
+A free, open-source, non-sandboxed alternative to [Stealthly](https://stealthly.app/).
 
 ## Features
 
@@ -37,28 +37,69 @@ should work but are unverified, and several of the underlying APIs are version-s
 
 ## Build
 
+Needs Xcode 16+ (Swift 6). Then:
+
 ```sh
-make install     # build, sign, and install to /Applications
+make install     # build and install to /Applications
 make run         # …and launch it
 make test        # run the state-machine tests
 ```
 
-`make install` signs with a real certificate rather than ad-hoc. This matters: macOS keys
-permission grants to an app's code signature, and ad-hoc signing produces a new hash on
-every build, so grants would evaporate each time you rebuilt. Point `SIGN_IDENTITY` at any
-codesigning identity you have:
+That's the whole build. No paid Apple Developer account is required to build and run it
+yourself.
 
-```sh
-make install SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
+### Keeping permission grants (optional)
+
+By default Mica is **ad-hoc signed**, which is fine to run but has one quirk: macOS keys
+permission grants to the code signature, and ad-hoc signing produces a new signature every
+build — so any permissions you grant reset on the next `make install`. To keep them, sign
+with a stable identity by creating a `Local.mk` (copy `Local.mk.example`):
+
+```make
+SIGN_IDENTITY = Apple Development: Your Name (TEAMID)
 ```
 
-Run `make verify` after two consecutive installs — if the designated requirement is
-identical both times, permissions will stick. If it contains a `cdhash`, signing fell back
-to ad-hoc.
+List identities with `security find-identity -v -p codesigning`. `Local.mk` is gitignored,
+so your identity never lands in the repo. Run `make verify` after two installs — a stable
+designated requirement means grants will stick; a `cdhash` means it fell back to ad-hoc.
 
-Always launch from `/Applications` (`make run` or the Finder), never by executing the
-binary from a shell — macOS attributes permissions to the *calling* process, so running it
-from a terminal grants them to your terminal instead of to Mica.
+Always launch from `/Applications` (`make run` or the Finder), never the built binary from
+a shell — macOS attributes permissions to the *calling* process, so a terminal launch
+grants them to your terminal instead of to Mica.
+
+## First run — what you'll need to do
+
+Mica avoids permission prompts wherever it can, so there's very little. But a few things
+are on you, because macOS gives an app no other way:
+
+- **Do Not Disturb** (only if you want it) — create two Shortcuts once. Mica walks you
+  through it in Settings → Features; details below. Skip it and the other five features
+  work with zero setup.
+- **Hide Menu Bar Icons** (only if you enable it) — drag Mica's `‹` marker into your menu
+  bar where you want the cut-off (hold ⌘ and drag). Everything left of it hides.
+- **macOS 26 "Allow in Menu Bar"** — Tahoe can hide a new app's menu bar icon by default.
+  If Mica's icon doesn't appear, enable it in System Settings → Control Center → Menu Bar,
+  or the "Allow in the Menu Bar" list.
+- **If you downloaded a build** (rather than building it yourself) — an ad-hoc or
+  Developer-ID-less app is quarantined by Gatekeeper. Right-click the app → **Open** the
+  first time, or run `xattr -cr /Applications/Mica.app`.
+
+No Accessibility, Screen Recording, or Full Disk Access permission is required for any
+feature.
+
+### Setting up Do Not Disturb
+
+macOS 26 has no API that lets a third-party app turn Focus on, so Mica runs a Shortcut you
+create once. In the Shortcuts app:
+
+1. New shortcut → add the **Set Focus** action. It already reads *Do Not Disturb, On* —
+   leave it. Name it exactly **`Mica Do Not Disturb On`**.
+2. Another new shortcut → **Set Focus** → switch it to *Off*. Name it exactly
+   **`Mica Do Not Disturb Off`**.
+
+Then in Mica → Settings → Features, both show a checkmark. Hit **Test** and confirm the
+menu-bar moon appears. (The Shortcuts editor may *label* the first one "Off" — that's a
+display glitch in Shortcuts; the Test confirms what it actually does.)
 
 ## Settings
 
@@ -89,8 +130,8 @@ driving System Events, Finder, and Shortcuts over AppleScript. In practice that 
 - **Menu bar icons** — an expanding spacer `NSStatusItem`, the Bartender/Ice technique. No
   Accessibility permission required.
 - **Do Not Disturb** — the one feature needing a one-time setup, because no public or
-  reachable API sets Focus on macOS 26. Mica runs a Shortcut you create once; a guided
-  first-run flow walks you through it.
+  reachable API sets Focus on macOS 26. Mica runs two Shortcuts you create once (see
+  above), found by name.
 - **Screen capture detection** — `CGSIsScreenWatcherPresent`, which reads the window
   server's own capture-stream count. One signal covers Zoom, Meet, Teams, QuickTime, ⌘⇧5,
   OBS, and Screen Sharing alike; there is no public equivalent.
@@ -118,10 +159,12 @@ is rejected, and `UNUserNotificationCenter` refuses authorization without even p
 Mica detects this and draws an equivalent banner itself, which needs no permission. Sign
 with a Developer ID and notarize, and it switches to real notifications automatically.
 
-**Do Not Disturb needs a one-time setup.** There is no reachable API for setting Focus on
-macOS 26 — the private service is gated behind an Apple-only entitlement, the Intents API
-is read-only, and writing the Focus database needs Full Disk Access and races the daemon
-that owns it. Create two Shortcuts, pick them in Settings → Features, done.
+**Do Not Disturb needs two hand-made Shortcuts.** There is no reachable API for setting
+Focus on macOS 26 — the private service is gated behind an Apple-only entitlement, the
+Intents API is read-only, and writing the Focus database needs Full Disk Access and races
+the daemon that owns it. A generated shortcut imports in a broken state and can't be read
+back to verify, so Mica has you create them by hand (30 seconds) and confirm with the Test
+button. See "Setting up Do Not Disturb" above.
 
 **A few captures are invisible.** The window server lets some Apple-internal streams
 exempt themselves from the count Mica reads. The design errs toward false positives.
@@ -129,3 +172,13 @@ exempt themselves from the count Mica reads. The design errs toward false positi
 **The whole menu bar can't be auto-hidden at runtime**, only the icons. macOS 26 moved
 that setting into Control Center's preferences, read at login, and the app-facing API only
 applies while the calling app is frontmost — which a menu bar utility never is.
+
+## Make it your own
+
+Fork it, rename it, change the icon — it's MIT licensed. Two things to set for a clean
+fork: your own `BUNDLE_ID` in `Local.mk`, and your own signing identity (see Build). The
+bundle identifier must be unique per app; don't ship two apps sharing one.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

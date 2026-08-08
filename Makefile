@@ -4,13 +4,19 @@
 # the code signature's designated requirement. Changing BUNDLE_ID or signing identity
 # resets every permission the app has been granted, so set them once and leave them.
 
+# Local overrides (signing identity, bundle ID, …) live in an untracked Local.mk so a
+# clone never inherits someone else's identity. Copy Local.mk.example to Local.mk.
+-include Local.mk
+
 APP_NAME      ?= Mica
-BUNDLE_ID     ?= com.vedant.mica
+BUNDLE_ID     ?= com.example.mica
 MIN_MACOS     ?= 15.0
-# A real certificate (not ad-hoc `-`) is what keeps the designated requirement stable
-# across rebuilds. Ad-hoc signing derives the DR from the cdhash, which changes on every
-# single build — so permissions would have to be re-granted constantly during development.
-SIGN_IDENTITY ?= Apple Development: Your Name (TEAMID)
+# Ad-hoc (`-`) by default so a fresh clone builds with no setup. The downside: ad-hoc
+# derives the signature's designated requirement from the cdhash, which changes on every
+# build, so macOS treats each build as a new app and TCC permission grants reset. To keep
+# grants stable, put a real codesigning identity in Local.mk:
+#     SIGN_IDENTITY = Apple Development: Your Name (TEAMID)
+SIGN_IDENTITY ?= -
 
 VERSION   := $(shell cat VERSION 2>/dev/null || echo 0.1.0)
 BUILD_NUM := $(shell git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M)

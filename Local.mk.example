@@ -1,0 +1,7 @@
+# Copy this file to Local.mk (which is gitignored) and set your own values.
+# A real signing identity keeps macOS permission grants from resetting on every build.
+# List your identities with:  security find-identity -v -p codesigning
+SIGN_IDENTITY = Apple Development: Your Name (TEAMID)
+
+# Optional: your own bundle identifier.
+BUNDLE_ID = com.example.mica
