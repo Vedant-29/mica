@@ -29,6 +29,18 @@
     <key>LSUIElement</key>
     <true/>
 
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>@BUNDLE_ID@</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>mica</string>
+            </array>
+        </dict>
+    </array>
+
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>

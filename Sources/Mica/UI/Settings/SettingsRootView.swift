@@ -4,21 +4,27 @@ import SwiftUI
 
 struct SettingsRootView: View {
     @Bindable var environment: AppEnvironment
+    @State var selectedTab: SettingsTab
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             GeneralSettingsView(environment: environment)
-                .tabItem { Label("General", systemImage: "gearshape") }
+                .tabItem { Label(SettingsTab.general.title, systemImage: SettingsTab.general.symbol) }
+                .tag(SettingsTab.general)
+
             FeaturesSettingsView(environment: environment)
-                .tabItem { Label("Features", systemImage: "eye.slash") }
-            AppsSettingsView(environment: environment)
-                .tabItem { Label("Apps", systemImage: "app.badge") }
-            ScheduleSettingsView(environment: environment)
-                .tabItem { Label("Schedule", systemImage: "clock") }
-            ShortcutSettingsView(environment: environment)
-                .tabItem { Label("Shortcut", systemImage: "command") }
+                .tabItem { Label(SettingsTab.features.title, systemImage: SettingsTab.features.symbol) }
+                .tag(SettingsTab.features)
+
+            WindowsSettingsView(environment: environment)
+                .tabItem { Label(SettingsTab.windows.title, systemImage: SettingsTab.windows.symbol) }
+                .tag(SettingsTab.windows)
+
+            TriggersSettingsView(environment: environment)
+                .tabItem { Label(SettingsTab.triggers.title, systemImage: SettingsTab.triggers.symbol) }
+                .tag(SettingsTab.triggers)
         }
-        .frame(width: 520, height: 430)
+        .frame(width: 600, height: 520)
     }
 }
 
@@ -34,29 +40,8 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Screen Share") {
-                Toggle(
-                    "Activate when screen is shared or recorded",
-                    isOn: binding(\.triggerScreenCapture)
-                )
-                .disabled(!ScreenCaptureMonitor.isSupported)
-
-                if !ScreenCaptureMonitor.isSupported {
-                    Text("This version of macOS no longer reports when the screen is being captured.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Screen Mirroring") {
-                Toggle(
-                    "Activate when screen is mirrored or extended",
-                    isOn: binding(\.triggerDisplayChange)
-                )
-            }
-
-            Section("Login") {
-                Toggle("Open Mica upon startup", isOn: $launchAtLogin)
+            Section("Startup") {
+                Toggle("Open Mica when you log in", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         if case .failure(let error) = LaunchAtLogin.setEnabled(enabled) {
                             launchError = error.localizedDescription
@@ -71,15 +56,25 @@ struct GeneralSettingsView: View {
                         .foregroundStyle(.orange)
                 }
             }
+
+            Section("Keyboard Shortcut") {
+                Toggle("Use a keyboard shortcut", isOn: Binding(
+                    get: { preferences.hotkeyEnabled },
+                    set: { preferences.hotkeyEnabled = $0 }
+                ))
+                KeyboardShortcuts.Recorder("Toggle Mica:", name: .toggleMica)
+                    .disabled(!preferences.hotkeyEnabled)
+
+                Text("""
+                    In On or Off, the shortcut switches between them. In Auto it overrides \
+                    whatever the triggers decided — and that override clears itself once the \
+                    trigger goes away, so the next screen share still turns Mica on.
+                    """)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-    }
-
-    private func binding(_ keyPath: ReferenceWritableKeyPath<Preferences, Bool>) -> Binding<Bool> {
-        Binding(
-            get: { preferences[keyPath: keyPath] },
-            set: { preferences[keyPath: keyPath] = $0; environment.settingsDidChange() }
-        )
     }
 }
 
@@ -90,41 +85,30 @@ struct FeaturesSettingsView: View {
 
     private var preferences: Preferences { environment.preferences }
 
+    /// Hide Active Windows has its own tab, since it is the one most people actually
+    /// configure and it needs the room.
+    private var featuresShownHere: [Feature] {
+        Feature.allCases.filter { $0 != .hideWindows }
+    }
+
     var body: some View {
         Form {
-            Section {
-                ForEach(Feature.allCases) { feature in
-                    Toggle(feature.displayName, isOn: Binding(
-                        get: { preferences.isEnabled(feature) },
-                        set: { preferences.setEnabled($0, for: feature); environment.enabledFeaturesDidChange() }
-                    ))
+            Section("What Mica hides") {
+                Toggle(Feature.hideWindows.displayName, isOn: binding(for: .hideWindows))
+                Text("Configured on the Windows tab.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                    if feature == .hideWindows, preferences.isEnabled(.hideWindows) {
-                        Picker("Hide", selection: Binding(
-                            get: { preferences.hideWindowsScope },
-                            set: { preferences.hideWindowsScope = $0; environment.settingsDidChange() }
-                        )) {
-                            ForEach(HideWindowsScope.allCases, id: \.self) {
-                                Text($0.displayName).tag($0)
-                            }
-                        }
-                        .pickerStyle(.radioGroup)
-                        .padding(.leading, 20)
+                ForEach(featuresShownHere) { feature in
+                    Toggle(feature.displayName, isOn: binding(for: feature))
 
-                        if preferences.hideWindowsScope.usesAppList {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(preferences.hideWindowsScope.listCaption)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                AppListEditor(store: environment.windowApps, showsAction: false) {
-                                    environment.settingsDidChange()
-                                }
-                            }
-                            .padding(.leading, 20)
-                        }
+                    if let note = feature.note, preferences.isEnabled(feature) {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-
-                    if let reason = environment.coordinator.effects[feature]?.unavailableReason {
+                    if preferences.isEnabled(feature),
+                       let reason = environment.coordinator.effects[feature]?.unavailableReason {
                         Text(reason)
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -136,35 +120,155 @@ struct FeaturesSettingsView: View {
         }
         .formStyle(.grouped)
     }
+
+    private func binding(for feature: Feature) -> Binding<Bool> {
+        Binding(
+            get: { preferences.isEnabled(feature) },
+            set: { preferences.setEnabled($0, for: feature); environment.enabledFeaturesDidChange() }
+        )
+    }
 }
 
-// MARK: - Schedule
+// MARK: - Windows
 
-struct ScheduleSettingsView: View {
+struct WindowsSettingsView: View {
     @Bindable var environment: AppEnvironment
 
     private var preferences: Preferences { environment.preferences }
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Activate during the following time window", isOn: Binding(
-                    get: { preferences.triggerSchedule },
-                    set: { preferences.triggerSchedule = $0; environment.settingsDidChange() }
+            Section("Hide Active Windows") {
+                Toggle("Hide windows while Mica is on", isOn: Binding(
+                    get: { preferences.isEnabled(.hideWindows) },
+                    set: { preferences.setEnabled($0, for: .hideWindows); environment.enabledFeaturesDidChange() }
                 ))
 
-                DatePicker("From", selection: timeBinding(\.scheduleStartMinutes), displayedComponents: .hourAndMinute)
-                DatePicker("Until", selection: timeBinding(\.scheduleEndMinutes), displayedComponents: .hourAndMinute)
+                Picker("Hide:", selection: Binding(
+                    get: { preferences.hideWindowsScope },
+                    set: { preferences.hideWindowsScope = $0; environment.settingsDidChange() }
+                )) {
+                    ForEach(HideWindowsScope.allCases, id: \.self) {
+                        Text($0.displayName).tag($0)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                .disabled(!preferences.isEnabled(.hideWindows))
             }
-            .disabled(!preferences.triggerSchedule)
+
+            if preferences.hideWindowsScope.usesAppList {
+                Section(preferences.hideWindowsScope.listCaption) {
+                    AppGridView(
+                        store: environment.windowApps,
+                        emptyMessage: emptyMessage,
+                        onChange: { environment.settingsDidChange() }
+                    )
+                    .disabled(!preferences.isEnabled(.hideWindows))
+                }
+            }
 
             Section {
-                Text("A window ending before it starts runs overnight — 22:00 until 06:00 covers the small hours.")
+                Text("""
+                    Mica hides applications, it doesn't close them — nothing you have open is \
+                    lost, and everything comes back exactly as it was. An app you'd already \
+                    hidden yourself stays hidden.
+                    """)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var emptyMessage: String {
+        switch preferences.hideWindowsScope {
+        case .onlySelected: "Add the apps you want hidden."
+        case .allExceptSelected: "Add the apps you want to stay visible."
+        default: ""
+        }
+    }
+}
+
+// MARK: - Triggers
+
+struct TriggersSettingsView: View {
+    @Bindable var environment: AppEnvironment
+
+    private var preferences: Preferences { environment.preferences }
+
+    var body: some View {
+        Form {
+            Section("Automatic") {
+                Toggle("When my screen is shared or recorded", isOn: binding(\.triggerScreenCapture))
+                    .disabled(!ScreenCaptureMonitor.isSupported)
+                if !ScreenCaptureMonitor.isSupported {
+                    Text("This version of macOS no longer reports when the screen is being captured.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                Toggle("When a display is mirrored or extended", isOn: binding(\.triggerDisplayChange))
+                Text("Fires whenever a second display is attached, so leave this off at a desk.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Schedule") {
+                Toggle("During a daily time window", isOn: binding(\.triggerSchedule))
+                DatePicker("From", selection: timeBinding(\.scheduleStartMinutes), displayedComponents: .hourAndMinute)
+                    .disabled(!preferences.triggerSchedule)
+                DatePicker("Until", selection: timeBinding(\.scheduleEndMinutes), displayedComponents: .hourAndMinute)
+                    .disabled(!preferences.triggerSchedule)
+                Text("A window ending before it starts runs overnight.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Trigger Apps") {
+                Toggle("When one of these apps is running", isOn: binding(\.triggerApps))
+                AppGridView(
+                    store: environment.triggerApps,
+                    showsAction: true,
+                    emptyMessage: "Add apps that should turn Mica on.",
+                    onChange: { environment.settingsDidChange() }
+                )
+                .disabled(!preferences.triggerApps)
+                Text("Activate turns Mica on by itself. Remind me just offers a prompt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Excluded Apps") {
+                Toggle("Never activate while one of these is running", isOn: binding(\.exclusionsEnabled))
+                AppGridView(
+                    store: environment.excludedApps,
+                    emptyMessage: "Add apps that should block automatic activation.",
+                    onChange: { environment.settingsDidChange() }
+                )
+                .disabled(!preferences.exclusionsEnabled)
+                Text("Applies in Auto only. Switching Mica On always wins.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if !environment.notifier.systemNotificationsAvailable {
+                    Text("""
+                        Reminders use Mica's own banner rather than a system notification, \
+                        because macOS only grants notification access to apps signed with a \
+                        notarized Developer ID.
+                        """)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func binding(_ keyPath: ReferenceWritableKeyPath<Preferences, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { preferences[keyPath: keyPath] },
+            set: { preferences[keyPath: keyPath] = $0; environment.settingsDidChange() }
+        )
     }
 
     /// `DatePicker` wants a `Date`; the preference is minutes past midnight, which is
@@ -177,43 +281,10 @@ struct ScheduleSettingsView: View {
                     bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()
                 ) ?? Date()
             },
-            set: { date in
-                preferences[keyPath: keyPath] = ScheduleWindow.minutes(from: date)
+            set: {
+                preferences[keyPath: keyPath] = ScheduleWindow.minutes(from: $0)
                 environment.settingsDidChange()
             }
         )
-    }
-}
-
-// MARK: - Shortcut
-
-struct ShortcutSettingsView: View {
-    @Bindable var environment: AppEnvironment
-
-    private var preferences: Preferences { environment.preferences }
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Trigger Mica with a keyboard shortcut", isOn: Binding(
-                    get: { preferences.hotkeyEnabled },
-                    set: { preferences.hotkeyEnabled = $0 }
-                ))
-                KeyboardShortcuts.Recorder("Shortcut:", name: .toggleMica)
-                    .disabled(!preferences.hotkeyEnabled)
-            }
-
-            Section {
-                Text("""
-                    While Mica is On or Off, the shortcut switches between them. While it's \
-                    set to Auto, the shortcut overrides whatever the triggers decided — and \
-                    that override clears itself once the trigger goes away, so the next \
-                    screen share still turns Mica on.
-                    """)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
     }
 }

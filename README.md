@@ -60,6 +60,18 @@ Always launch from `/Applications` (`make run` or the Finder), never by executin
 binary from a shell — macOS attributes permissions to the *calling* process, so running it
 from a terminal grants them to your terminal instead of to Mica.
 
+## Settings
+
+Click the menu bar icon → **Settings**, or open a URL:
+
+```sh
+open mica://settings     # or mica://windows, mica://features, mica://triggers
+```
+
+Four tabs: **General** (startup, keyboard shortcut), **Features** (what gets hidden, and
+the Do Not Disturb setup), **Windows** (which apps Hide Active Windows acts on), and
+**Triggers** (what turns Auto on, and what blocks it).
+
 ## How it works
 
 Mica is not sandboxed, which lets it use the underlying system APIs directly instead of

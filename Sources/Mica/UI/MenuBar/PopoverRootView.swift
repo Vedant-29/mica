@@ -5,8 +5,8 @@ import SwiftUI
 /// Settings and Quit.
 struct PopoverRootView: View {
     @Bindable var environment: AppEnvironment
-
-    @Environment(\.openSettings) private var openSettings
+    /// Dismisses the popover, so a window opening doesn't leave it hanging over the top.
+    let onRequestClose: () -> Void
 
     private var preferences: Preferences { environment.preferences }
 
@@ -70,11 +70,8 @@ struct PopoverRootView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             MenuActionRow(title: "Settings", symbolName: "gearshape") {
-                // An accessory app is never the active app, so a window opened from the
-                // menu bar surfaces behind whatever the user was looking at unless we
-                // activate first.
-                NSApp.activate(ignoringOtherApps: true)
-                openSettings()
+                onRequestClose()
+                environment.settingsWindow.show()
             }
             MenuActionRow(title: "Quit Mica", symbolName: "xmark.square") {
                 environment.terminate()

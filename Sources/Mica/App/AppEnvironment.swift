@@ -23,6 +23,9 @@ final class AppEnvironment {
     /// Apps chosen for the two list-based Hide Active Windows scopes.
     let windowApps = AppListStore(filename: "WindowApps.json")
 
+    /// Lazily built because the controller needs the fully-constructed environment.
+    @ObservationIgnored lazy var settingsWindow = SettingsWindowController(environment: self)
+
     @ObservationIgnored private let menuBarIcons = MenuBarIconsEffect()
     @ObservationIgnored private let doNotDisturbMonitor = DoNotDisturbMonitor()
     @ObservationIgnored private let signalTrap = SignalTrap()
