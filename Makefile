@@ -31,7 +31,7 @@ ICON_SOURCES := Tools/mkicon.swift Sources/Mica/UI/MicaIcon.swift Sources/Mica/U
 
 export APP_NAME BUNDLE_ID MIN_MACOS VERSION BUILD_NUM
 
-.PHONY: all build test icon bundle sign verify install run clean uninstall reset-tcc
+.PHONY: all build test icon bundle sign verify install run clean uninstall reset-tcc dmg
 
 all: install
 
@@ -73,6 +73,13 @@ install: sign
 # from a shell makes macOS attribute permission grants to the terminal instead of Mica.
 run: install
 	@open -a "$(INSTALLED)"
+
+# A drag-to-Applications DMG for distribution. Signs first so the bundle inside is signed;
+# for a public download, also notarize (needs a paid Developer ID) or recipients must
+# right-click → Open past Gatekeeper the first time.
+dmg: sign
+	@Scripts/make-dmg.sh
+	@echo "  → $(DIST_DIR)/$(APP_NAME).dmg"
 
 clean:
 	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(ICNS)
