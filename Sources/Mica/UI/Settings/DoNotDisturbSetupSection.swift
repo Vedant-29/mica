@@ -28,6 +28,7 @@ struct DoNotDisturbSetupSection: View {
 
     @State private var step: Step = .needsSetup
     @State private var isTesting = false
+    @State private var hasDuplicates = false
 
     private var preferences: Preferences { environment.preferences }
 
@@ -67,6 +68,12 @@ struct DoNotDisturbSetupSection: View {
                     Button(isTesting ? "Testing" : "Test Again") { verify() }
                         .disabled(isTesting)
                     Button("Make Again") { step = .needsSetup }
+                }
+                if hasDuplicates {
+                    Text("There is more than one shortcut with these names. Delete the extras in Shortcuts, otherwise Mica may run the wrong one.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
             case .needsManualFix:
@@ -165,6 +172,10 @@ struct DoNotDisturbSetupSection: View {
     }
 
     private func locate() async {
+        let all = await Task.detached { ShortcutsRunner.list() }.value
+        hasDuplicates = all.filter { $0.name == ShortcutInstaller.onName }.count > 1
+            || all.filter { $0.name == ShortcutInstaller.offName }.count > 1
+
         let installed = await Task.detached { ShortcutInstaller.findInstalled() }.value
         if let on = installed.on { preferences.dndShortcutOnID = on }
         if let off = installed.off { preferences.dndShortcutOffID = off }
