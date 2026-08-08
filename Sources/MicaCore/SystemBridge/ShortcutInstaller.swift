@@ -95,10 +95,17 @@ public nonisolated enum ShortcutInstaller {
     /// current. If a future macOS changes the parameter shape, the action still imports
     /// and stays editable in the Shortcuts app — which is why Settings offers a test.
     private static func plist(turnOn: Bool) throws -> Data {
+        // `FocusModes` is known-good: the imported action shows "Do Not Disturb" as its
+        // mode. The on/off value was previously written as an integer and Shortcuts
+        // ignored it, leaving both shortcuts set to Off. A real boolean is the likeliest
+        // shape, but this is not verifiable from outside the app: the Shortcuts library
+        // is TCC-protected and signed shortcut files are encrypted archives. Hence the
+        // automatic check after import, which catches a wrong guess rather than letting
+        // it ship silently.
         let action: [String: Any] = [
             "WFWorkflowActionIdentifier": "is.workflow.actions.dnd.set",
             "WFWorkflowActionParameters": [
-                "OnValue": turnOn ? 1 : 0,
+                "OnValue": turnOn,
                 "Enabled": turnOn,
                 "FocusModes": [
                     "Identifier": "com.apple.donotdisturb.mode.default",
