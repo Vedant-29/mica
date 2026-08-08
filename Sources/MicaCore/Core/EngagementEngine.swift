@@ -115,7 +115,7 @@ public nonisolated enum EngagementReason: Equatable, Sendable {
         case .triggerApp(let name): "\(name) is running"
         case .schedule: "Within the scheduled window"
         case .noTrigger: "Waiting for a trigger"
-        case .blockedByExcludedApp(let name): "Paused — \(name) is excluded"
+        case .blockedByExcludedApp(let name): "Paused, \(name) is excluded"
         }
     }
 }

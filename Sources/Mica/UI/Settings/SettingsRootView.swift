@@ -37,25 +37,10 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            // Promoted from the Triggers tab: this is the pair almost everyone actually
-            // sets, and burying them behind a tab left this page looking half-finished.
-            Section("Turn on automatically") {
+            Section("Turn On Automatically") {
                 Toggle("When my screen is shared or recorded", isOn: binding(\.triggerScreenCapture))
                     .disabled(!ScreenCaptureMonitor.isSupported)
-                if !ScreenCaptureMonitor.isSupported {
-                    Text("This version of macOS no longer reports when the screen is being captured.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-
                 Toggle("When a display is mirrored or extended", isOn: binding(\.triggerDisplayChange))
-                Text("Fires whenever a second display is attached, so leave this off at a desk.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Text("These only apply in Auto. App and schedule rules are on the Triggers tab.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
             }
 
             Section("Startup") {
@@ -82,14 +67,6 @@ struct GeneralSettingsView: View {
                 ))
                 KeyboardShortcuts.Recorder("Toggle Mica:", name: .toggleMica)
                     .disabled(!preferences.hotkeyEnabled)
-
-                Text("""
-                    In On or Off, the shortcut switches between them. In Auto it overrides \
-                    whatever the triggers decided — and that override clears itself once the \
-                    trigger goes away, so the next screen share still turns Mica on.
-                    """)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -110,35 +87,20 @@ struct FeaturesSettingsView: View {
 
     private var preferences: Preferences { environment.preferences }
 
-    /// Hide Active Windows has its own tab, since it is the one most people actually
-    /// configure and it needs the room.
-    private var featuresShownHere: [Feature] {
-        Feature.allCases.filter { $0 != .hideWindows }
+    /// Hide Active Windows lives on its own tab, toggle included. Listing it here too,
+    /// with a line telling the user to go elsewhere, is a redirect where a control
+    /// should be.
+    private var simpleFeatures: [Feature] {
+        Feature.allCases.filter { $0 != .hideWindows && $0 != .doNotDisturb }
     }
 
     var body: some View {
         Form {
-            Section("What Mica hides") {
-                Toggle(Feature.hideWindows.displayName, isOn: binding(for: .hideWindows))
-                Text("Configured on the Windows tab.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                ForEach(featuresShownHere) { feature in
+            Section("What Mica Hides") {
+                ForEach(simpleFeatures) { feature in
                     Toggle(feature.displayName, isOn: binding(for: feature))
-
-                    if let note = feature.note, preferences.isEnabled(feature) {
-                        Text(note)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if preferences.isEnabled(feature),
-                       let reason = environment.coordinator.effects[feature]?.unavailableReason {
-                        Text(reason)
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
                 }
+                Toggle(Feature.doNotDisturb.displayName, isOn: binding(for: .doNotDisturb))
             }
 
             DoNotDisturbSetupSection(environment: environment)
@@ -191,16 +153,6 @@ struct WindowsSettingsView: View {
                     .disabled(!preferences.isEnabled(.hideWindows))
                 }
             }
-
-            Section {
-                Text("""
-                    Mica hides applications, it doesn't close them — nothing you have open is \
-                    lost, and everything comes back exactly as it was. An app you'd already \
-                    hidden yourself stays hidden.
-                    """)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
     }
@@ -223,25 +175,8 @@ struct TriggersSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Text("Screen sharing and display triggers live on the General tab.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Schedule") {
-                Toggle("During a daily time window", isOn: binding(\.triggerSchedule))
-                DatePicker("From", selection: timeBinding(\.scheduleStartMinutes), displayedComponents: .hourAndMinute)
-                    .disabled(!preferences.triggerSchedule)
-                DatePicker("Until", selection: timeBinding(\.scheduleEndMinutes), displayedComponents: .hourAndMinute)
-                    .disabled(!preferences.triggerSchedule)
-                Text("A window ending before it starts runs overnight.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section("Trigger Apps") {
-                Toggle("When one of these apps is running", isOn: binding(\.triggerApps))
+                Toggle("Turn on when one of these is running", isOn: binding(\.triggerApps))
                 AppGridView(
                     store: environment.triggerApps,
                     showsAction: true,
@@ -249,32 +184,24 @@ struct TriggersSettingsView: View {
                     onChange: { environment.settingsDidChange() }
                 )
                 .disabled(!preferences.triggerApps)
-                Text("Activate turns Mica on by itself. Remind me just offers a prompt.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Excluded Apps") {
-                Toggle("Never activate while one of these is running", isOn: binding(\.exclusionsEnabled))
+                Toggle("Never turn on while one of these is running", isOn: binding(\.exclusionsEnabled))
                 AppGridView(
                     store: environment.excludedApps,
-                    emptyMessage: "Add apps that should block automatic activation.",
+                    emptyMessage: "Add apps that should block Mica.",
                     onChange: { environment.settingsDidChange() }
                 )
                 .disabled(!preferences.exclusionsEnabled)
-                Text("Applies in Auto only. Switching Mica On always wins.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
 
-                if !environment.notifier.systemNotificationsAvailable {
-                    Text("""
-                        Reminders use Mica's own banner rather than a system notification, \
-                        because macOS only grants notification access to apps signed with a \
-                        notarized Developer ID.
-                        """)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            Section("Schedule") {
+                Toggle("Turn on during a daily time window", isOn: binding(\.triggerSchedule))
+                DatePicker("From", selection: timeBinding(\.scheduleStartMinutes), displayedComponents: .hourAndMinute)
+                    .disabled(!preferences.triggerSchedule)
+                DatePicker("Until", selection: timeBinding(\.scheduleEndMinutes), displayedComponents: .hourAndMinute)
+                    .disabled(!preferences.triggerSchedule)
             }
         }
         .formStyle(.grouped)

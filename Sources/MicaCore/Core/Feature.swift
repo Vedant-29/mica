@@ -42,8 +42,7 @@ public nonisolated enum Feature: String, CaseIterable, Codable, Sendable, Identi
     public var note: String? {
         switch self {
         case .hideMenuBarIcons:
-            "Every menu bar icon to the left of Mica's indicator (‹) is hidden. "
-                + "Hold Command (⌘) and drag menu bar icons to rearrange them."
+            "Hides every icon to the left of Mica's ‹ marker. Hold ⌘ and drag icons to move them."
         default:
             nil
         }
