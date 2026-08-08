@@ -7,22 +7,19 @@ struct SettingsRootView: View {
     @State var selectedTab: SettingsTab
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            GeneralSettingsView(environment: environment)
-                .tabItem { Label(SettingsTab.general.title, systemImage: SettingsTab.general.symbol) }
-                .tag(SettingsTab.general)
+        VStack(spacing: 0) {
+            SettingsTabBar(selection: $selectedTab)
+            Divider()
 
-            FeaturesSettingsView(environment: environment)
-                .tabItem { Label(SettingsTab.features.title, systemImage: SettingsTab.features.symbol) }
-                .tag(SettingsTab.features)
-
-            WindowsSettingsView(environment: environment)
-                .tabItem { Label(SettingsTab.windows.title, systemImage: SettingsTab.windows.symbol) }
-                .tag(SettingsTab.windows)
-
-            TriggersSettingsView(environment: environment)
-                .tabItem { Label(SettingsTab.triggers.title, systemImage: SettingsTab.triggers.symbol) }
-                .tag(SettingsTab.triggers)
+            Group {
+                switch selectedTab {
+                case .general: GeneralSettingsView(environment: environment)
+                case .features: FeaturesSettingsView(environment: environment)
+                case .windows: WindowsSettingsView(environment: environment)
+                case .triggers: TriggersSettingsView(environment: environment)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 600, height: 520)
     }

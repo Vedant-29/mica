@@ -65,6 +65,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         )
         window.title = "Mica Settings"
         window.delegate = self
+        // The tab strip sits directly under the title bar, so a separate title bar
+        // background just adds another edge and another shadow line under it.
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
         // Keeping the instance alive across closes preserves scroll position and the
         // selected tab, and avoids re-running the Shortcuts lookup on every open.
         window.isReleasedWhenClosed = false
