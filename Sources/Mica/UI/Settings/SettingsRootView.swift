@@ -37,6 +37,27 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
+            // Promoted from the Triggers tab: this is the pair almost everyone actually
+            // sets, and burying them behind a tab left this page looking half-finished.
+            Section("Turn on automatically") {
+                Toggle("When my screen is shared or recorded", isOn: binding(\.triggerScreenCapture))
+                    .disabled(!ScreenCaptureMonitor.isSupported)
+                if !ScreenCaptureMonitor.isSupported {
+                    Text("This version of macOS no longer reports when the screen is being captured.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                Toggle("When a display is mirrored or extended", isOn: binding(\.triggerDisplayChange))
+                Text("Fires whenever a second display is attached, so leave this off at a desk.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("These only apply in Auto. App and schedule rules are on the Triggers tab.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("Startup") {
                 Toggle("Open Mica when you log in", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
@@ -72,6 +93,13 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func binding(_ keyPath: ReferenceWritableKeyPath<Preferences, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { preferences[keyPath: keyPath] },
+            set: { preferences[keyPath: keyPath] = $0; environment.settingsDidChange() }
+        )
     }
 }
 
@@ -195,17 +223,8 @@ struct TriggersSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Automatic") {
-                Toggle("When my screen is shared or recorded", isOn: binding(\.triggerScreenCapture))
-                    .disabled(!ScreenCaptureMonitor.isSupported)
-                if !ScreenCaptureMonitor.isSupported {
-                    Text("This version of macOS no longer reports when the screen is being captured.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-
-                Toggle("When a display is mirrored or extended", isOn: binding(\.triggerDisplayChange))
-                Text("Fires whenever a second display is attached, so leave this off at a desk.")
+            Section {
+                Text("Screen sharing and display triggers live on the General tab.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
