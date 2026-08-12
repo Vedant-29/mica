@@ -1,4 +1,6 @@
 import AppKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 /// A borderless window that sits directly on top of the wallpaper.
 ///
@@ -33,12 +35,62 @@ final class WallpaperCoverWindow: NSWindow {
         // A shadow at desktop level draws a visible dark band along the screen edges.
         hasShadow = false
         isOpaque = true
+        // Stands in when the wallpaper can't be read — a picture-in-picture desktop, a
+        // dynamic wallpaper mid-transition, or a file the sandbox won't open.
         backgroundColor = .windowBackgroundColor
         isReleasedWhenClosed = false
         displaysWhenScreenProfileChanges = true
 
         // `frame`, not `visibleFrame` — the cover should extend under the menu bar too.
         setFrame(screen.frame, display: true)
+
+        installBlurredWallpaper(for: screen)
+    }
+
+    /// Covers the screen with a heavily blurred copy of the wallpaper rather than a flat
+    /// fill.
+    ///
+    /// A plain grey rectangle reads as a broken display, and on a call it draws more
+    /// attention than the wallpaper did. Blurring keeps the colour and mood of the desk
+    /// while destroying everything identifiable in it — which is all the feature ever
+    /// promised.
+    func refreshBlurredWallpaper(for screen: NSScreen) {
+        installBlurredWallpaper(for: screen)
+    }
+
+    private func installBlurredWallpaper(for screen: NSScreen) {
+        guard let image = Self.blurredWallpaper(for: screen) else { return }
+
+        let view = NSImageView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        // The blur is rendered at the screen's aspect ratio already; filling avoids
+        // letterboxing if the wallpaper's own ratio differs.
+        view.imageScaling = .scaleAxesIndependently
+        view.image = image
+        view.autoresizingMask = [.width, .height]
+        contentView = view
+    }
+
+    private static func blurredWallpaper(for screen: NSScreen) -> NSImage? {
+        guard let url = NSWorkspace.shared.desktopImageURL(for: screen),
+              let source = CIImage(contentsOf: url)
+        else { return nil }
+
+        // Scaled to the screen, so the same blur reads identically on a laptop panel and a
+        // 5K display. Tuned by eye at the point where the large shapes of a photo stop
+        // being readable — a lighter blur still gives away roughly what the picture is,
+        // which is the thing the feature is meant to prevent.
+        let radius = max(40, screen.frame.height * 0.08)
+
+        // Gaussian blur samples beyond the image bounds, which without a clamp leaves the
+        // edges fading to transparent and the desktop showing through them.
+        let blurred = source
+            .clampedToExtent()
+            .applyingGaussianBlur(sigma: radius)
+            .cropped(to: source.extent)
+
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(blurred, from: source.extent) else { return nil }
+        return NSImage(cgImage: cgImage, size: screen.frame.size)
     }
 
     override var canBecomeKey: Bool { false }
@@ -101,6 +153,9 @@ final class WallpaperCoverController {
 
             if let existing = windows[id] {
                 existing.setFrame(screen.frame, display: true)
+                // Re-blur at the new size: a cover that moved to a different display
+                // would otherwise stretch the old screen's render across it.
+                existing.refreshBlurredWallpaper(for: screen)
                 existing.show()
             } else {
                 let window = WallpaperCoverWindow(screen: screen)
