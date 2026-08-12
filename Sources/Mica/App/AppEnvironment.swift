@@ -114,6 +114,12 @@ final class AppEnvironment {
         NSApp.terminate(nil)
     }
 
+    /// Passes Mica's own menu bar item down to the spacer, which needs to know where it
+    /// sits so that collapsing the bar never hides the app from itself.
+    func registerOwnStatusItem(_ item: NSStatusItem) {
+        menuBarIcons.setOwnStatusItem(item)
+    }
+
     /// The menu bar spacer exists whenever the feature is switched on, not only while
     /// engaged — otherwise there'd be no `‹` handle to drag into position beforehand.
     private func syncEnabledFeatures() {

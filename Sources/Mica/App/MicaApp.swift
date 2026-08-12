@@ -21,7 +21,13 @@ struct MicaApp: App {
         }
         // Order matters: menuBarExtraStyle changes the Scene type, and the access
         // modifier is only defined on the MenuBarExtra itself.
-        .menuBarExtraAccess(isPresented: $isPopoverPresented)
+        //
+        // The introspection callback is the only route to the `NSStatusItem` behind a
+        // `MenuBarExtra`; the menu-bar spacer needs it to know which item it must never
+        // push off the edge of the screen.
+        .menuBarExtraAccess(isPresented: $isPopoverPresented) { statusItem in
+            appDelegate.environment.registerOwnStatusItem(statusItem)
+        }
         .menuBarExtraStyle(.window)
     }
 }
