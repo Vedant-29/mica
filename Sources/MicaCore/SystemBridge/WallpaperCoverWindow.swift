@@ -62,9 +62,10 @@ final class WallpaperCoverWindow: NSWindow {
         guard let image = Self.blurredWallpaper(for: screen) else { return }
 
         let view = NSImageView(frame: NSRect(origin: .zero, size: screen.frame.size))
-        // The blur is rendered at the screen's aspect ratio already; filling avoids
-        // letterboxing if the wallpaper's own ratio differs.
-        view.imageScaling = .scaleAxesIndependently
+        // The render is already cropped to exactly this screen's aspect ratio, so there is
+        // nothing left to fit — drawing it 1:1 keeps the view out of the geometry.
+        view.imageScaling = .scaleNone
+        view.imageAlignment = .alignCenter
         view.image = image
         view.autoresizingMask = [.width, .height]
         contentView = view
@@ -75,21 +76,46 @@ final class WallpaperCoverWindow: NSWindow {
               let source = CIImage(contentsOf: url)
         else { return nil }
 
-        // Scaled to the screen, so the same blur reads identically on a laptop panel and a
-        // 5K display. Tuned by eye at the point where the large shapes of a photo stop
-        // being readable — a lighter blur still gives away roughly what the picture is,
-        // which is the thing the feature is meant to prevent.
-        let radius = max(40, screen.frame.height * 0.08)
+        // Everything below works in pixels, not points. A blur specified in points but
+        // applied to a source measured in pixels changes strength with whatever resolution
+        // the wallpaper file happens to be, which is not something the user chose.
+        let pixelSize = CGSize(
+            width: screen.frame.width * screen.backingScaleFactor,
+            height: screen.frame.height * screen.backingScaleFactor
+        )
+        let extent = source.extent
+        guard extent.width > 0, extent.height > 0 else { return nil }
+
+        // Scale to *cover* and centre-crop, which is what macOS's own "Fill Screen" does.
+        // Scaling each axis independently to the screen instead squashes any wallpaper
+        // whose aspect ratio differs from the display's — a 16:9 photo on a 1512×982 panel
+        // comes out visibly squeezed, and the cover stops matching the desktop it replaced.
+        let ratio = max(pixelSize.width / extent.width, pixelSize.height / extent.height)
+        let scaled = source.transformed(by: CGAffineTransform(scaleX: ratio, y: ratio))
+        let crop = CGRect(
+            x: scaled.extent.midX - pixelSize.width / 2,
+            y: scaled.extent.midY - pixelSize.height / 2,
+            width: pixelSize.width,
+            height: pixelSize.height
+        )
+
+        // Tuned by eye between two failures: light enough that the wallpaper's colour and
+        // large-scale light and shade still read as *this* desk rather than a grey card,
+        // heavy enough that nothing in it can be made out. Pushed much past this and the
+        // result collapses into a flat gradient, which is the thing a plain fill did wrong.
+        let radius = max(24, pixelSize.height * 0.035)
 
         // Gaussian blur samples beyond the image bounds, which without a clamp leaves the
-        // edges fading to transparent and the desktop showing through them.
-        let blurred = source
+        // edges fading to transparent and the real desktop showing through them.
+        let blurred = scaled
             .clampedToExtent()
             .applyingGaussianBlur(sigma: radius)
-            .cropped(to: source.extent)
+            .cropped(to: crop)
 
         let context = CIContext()
-        guard let cgImage = context.createCGImage(blurred, from: source.extent) else { return nil }
+        guard let cgImage = context.createCGImage(blurred, from: crop) else { return nil }
+        // Sized in points while backed by the full pixel render, so it stays sharp on
+        // Retina rather than being upscaled from a point-sized bitmap.
         return NSImage(cgImage: cgImage, size: screen.frame.size)
     }
 
