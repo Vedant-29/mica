@@ -53,6 +53,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         if let window {
             if tab != nil { rebuildContent() }
+            applySharingType(to: window)
             window.makeKeyAndOrderFront(nil)
             return
         }
@@ -75,13 +76,31 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // selected tab, and avoids re-running the Shortcuts lookup on every open.
         window.isReleasedWhenClosed = false
         window.center()
-        // A screen-privacy app's own configuration is exactly the sort of thing you don't
-        // want appearing in the share you're configuring it for.
-        window.sharingType = .none
 
         self.window = window
+        applySharingType(to: window)
         rebuildContent()
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Excludes the settings window from capture, but only while something is actually
+    /// capturing.
+    ///
+    /// A screen-privacy app's own configuration is exactly the sort of thing you don't
+    /// want appearing in the share you're configuring it for. Setting `.none`
+    /// unconditionally went further than that: it also made the window impossible to
+    /// screenshot when nothing was being shared, which breaks bug reports, documentation
+    /// and anyone writing about the app — for no privacy gain, because there is no
+    /// audience to leak to. So the exclusion now tracks engagement instead.
+    private func applySharingType(to window: NSWindow) {
+        window.sharingType = environment.engagement.decision.shouldEngage ? .none : .readOnly
+    }
+
+    /// Engagement can begin while the window is already open — someone hits Share mid-way
+    /// through configuring Mica — so the exclusion has to be re-applied, not just set once.
+    func engagementDidChange() {
+        guard let window else { return }
+        applySharingType(to: window)
     }
 
     private func rebuildContent() {

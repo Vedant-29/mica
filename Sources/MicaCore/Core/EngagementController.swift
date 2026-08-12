@@ -15,6 +15,10 @@ public final class EngagementController {
     /// Name of whatever is capturing the screen, when it could be identified.
     public private(set) var capturerName: String?
 
+    /// Fired when engagement starts or stops, for the things that have to react outside
+    /// the effect pipeline — the settings window excludes itself from capture on it.
+    @ObservationIgnored public var onEngagementChanged: ((Bool) -> Void)?
+
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private let coordinator: PrivacyCoordinator
     @ObservationIgnored public let triggerApps: AppListStore
@@ -201,8 +205,11 @@ public final class EngagementController {
         }
 
         let decision = EngagementEngine.decide(inputs)
+        let wasEngaging = self.decision.shouldEngage
         self.decision = decision
         capturerName = screenCapture?.capturerName
+
+        if decision.shouldEngage != wasEngaging { onEngagementChanged?(decision.shouldEngage) }
 
         // Direct user input is never made to wait.
         releaseDebouncer?.set(decision.shouldEngage, immediate: immediate || decision.isManual)

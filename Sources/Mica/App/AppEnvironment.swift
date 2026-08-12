@@ -89,6 +89,11 @@ final class AppEnvironment {
         // nothing to exempt.
         _ = FrontmostTracker.shared
 
+        // Keeps an already-open settings window out of a share that starts underneath it.
+        engagement.onEngagementChanged = { [weak self] _ in
+            self?.settingsWindow.engagementDidChange()
+        }
+
         syncEnabledFeatures()
         engagement.start()
     }
