@@ -116,6 +116,10 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          # Stated explicitly: on workflow_dispatch `github.ref` is the branch the
+          # workflow was dispatched from, not the tag being built, and the action
+          # has no tag to attach the release to.
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             dist/Mica.dmg
             dist/Mica.dmg.sha256
@@ -123,4 +127,4 @@ jobs:
           # The site links to /releases/latest/download/Mica.dmg, which skips
           # prereleases — so a v0.3.0-rc1 tag can be published without moving the
           # download everyone lands on.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(inputs.tag || github.ref_name, '-') }}
