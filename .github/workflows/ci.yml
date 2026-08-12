@@ -1,0 +1,16 @@
+name: CI
+
+# Every push and PR builds and tests. Deliberately does not sign or package —
+# that is the release workflow's job, and it needs secrets a fork must not get.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build
+      - run: swift test

@@ -31,7 +31,7 @@ ICON_SOURCES := Tools/mkicon.swift Sources/Mica/UI/MicaIcon.swift Sources/Mica/U
 
 export APP_NAME BUNDLE_ID MIN_MACOS VERSION BUILD_NUM
 
-.PHONY: all build test icon bundle sign verify install run clean uninstall reset-tcc dmg
+.PHONY: all build test icon bundle sign verify install run clean uninstall reset-tcc dmg release
 
 all: install
 
@@ -80,6 +80,11 @@ run: install
 dmg: sign
 	@Scripts/make-dmg.sh
 	@echo "  → $(DIST_DIR)/$(APP_NAME).dmg"
+
+# Cuts a release: bumps VERSION, tags, pushes. CI builds the DMG and publishes it.
+#   make release BUMP=patch    (or minor / major / an explicit X.Y.Z)
+release:
+	@Scripts/release.sh $(BUMP)
 
 clean:
 	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(ICNS)

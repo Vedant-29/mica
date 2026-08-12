@@ -1,0 +1,101 @@
+name: Release
+
+# Tag-driven. Pushing v0.2.0 builds that commit, attaches Mica.dmg to a GitHub
+# Release, and the download button on mica.vedantagrw.com starts serving it — it
+# points at /releases/latest/download/Mica.dmg, which always resolves to the
+# newest published release.
+#
+# Nothing secret lives in this file. The signing certificate comes from repository
+# secrets, which are encrypted, withheld from forks, and masked in logs; a public
+# workflow referencing ${{ secrets.X }} gives nothing away on its own.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      BUNDLE_ID: com.vedant.mica
+      # `secrets` is not available in a step-level `if`, so the presence check is
+      # hoisted to the job env and tested as a string below.
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          # BUILD_NUM is `git rev-list --count HEAD`, which needs real history.
+          fetch-depth: 0
+
+      - name: Check the tag matches VERSION
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          TAG="${TAG#v}"
+          FILE="$(cat VERSION)"
+          if [ "$TAG" != "$FILE" ]; then
+            echo "::error::tag v$TAG does not match VERSION ($FILE). Bump VERSION first — see CLAUDE.md."
+            exit 1
+          fi
+          echo "building $FILE"
+
+      - name: Run tests
+        run: swift test
+
+      # Without a certificate the build is ad-hoc signed. That installs fine, but macOS
+      # derives the signature's designated requirement from the cdhash, which changes on
+      # every build — so each update looks like a brand-new app and users re-grant Screen
+      # Recording and Accessibility. Adding the secrets keeps those grants across versions.
+      - name: Import signing certificate
+        if: env.HAS_CERT == 'true'
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | sed -E 's/.*"(.+)"/\1/')"
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Warn that this build is ad-hoc signed
+        if: env.HAS_CERT != 'true'
+        run: echo "::warning::No MACOS_CERT_P12 secret; building ad-hoc. Users will re-grant permissions on update."
+
+      - name: Build the DMG
+        run: |
+          # An empty SIGN_IDENTITY falls through to the Makefile's ad-hoc default.
+          if [ -n "${SIGN_IDENTITY:-}" ]; then
+            make dmg SIGN_IDENTITY="$SIGN_IDENTITY" BUNDLE_ID="$BUNDLE_ID"
+          else
+            make dmg BUNDLE_ID="$BUNDLE_ID"
+          fi
+
+      - name: Checksum
+        run: shasum -a 256 dist/Mica.dmg | tee dist/Mica.dmg.sha256
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Mica.dmg
+            dist/Mica.dmg.sha256
+          generate_release_notes: true
+          # The site links to /releases/latest/download/Mica.dmg, which skips
+          # prereleases — so a v0.3.0-rc1 tag can be published without moving the
+          # download everyone lands on.
+          prerelease: ${{ contains(github.ref_name, '-') }}
