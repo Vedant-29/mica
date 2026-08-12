@@ -76,42 +76,38 @@ downloadable but does not become `latest`.
 
 ### Signing
 
-Releases are signed with a personal Apple Development certificate:
-
-    Apple Development: <redacted-email> (<redacted>)
-    SHA-1 <redacted-cert-sha1>, expires 2027-08-12
-
-Configured in two places, which must agree:
+Releases are signed with a personal Apple Development certificate. **The identity is
+deliberately not named here** — it lives in `Local.mk` (untracked) for local builds and
+in repository secrets for CI, and this file is public.
 
   Local.mk                  SIGN_IDENTITY, for local builds
-  MACOS_CERT_P12 (secret)   base64 .p12 of that identity plus the WWDR G3
-  MACOS_CERT_PASSWORD       its export password
-  SIGN_TEAM_ID (variable)   <redacted>
+  MACOS_CERT_P12 (secret)   base64 .p12 of that identity plus its WWDR intermediate
+  MACOS_CERT_PASSWORD       the .p12 export password
+  SIGN_TEAM_ID (variable)   team ID CI matches when picking the identity
 
-`Local.mk` names the certificate by **SHA-1, not by common name**. The login
-keychain holds two certificates with this same CN — the expired 2026 one and the
-current one — and codesign resolving by name could pick either.
+Both must resolve to the same certificate, or a locally built release and a CI-built one
+carry different signatures.
 
-Both paths produce the same designated requirement, which is the point:
+**Reference the certificate by SHA-1, not by common name.** A keychain can hold several
+certificates sharing one CN — an expired one and its replacement — and codesign resolving
+by name may pick either. `security find-identity -v -p codesigning` lists hashes.
 
-    identifier "com.vedant.mica" and anchor apple generic
-      and certificate leaf[subject.CN] = "Apple Development: <redacted-email> (<redacted>)"
+Why any of this matters: macOS keys TCC permission grants to the signature's designated
+requirement. Keep it identical across releases and users keep their Screen Recording and
+Accessibility grants; change it and every user re-grants. With no certificate the build is
+ad-hoc, whose requirement derives from the cdhash and so changes on every single build.
 
-macOS keys TCC permission grants on that string. Keep it identical across
-releases and users keep their Screen Recording and Accessibility grants; change
-it and every user re-grants. Without any certificate the build is ad-hoc, whose
-requirement is derived from the cdhash and therefore changes every single build.
+`make verify` prints the requirement. Two installs should print the same string; if it
+mentions `cdhash`, signing fell back to ad-hoc.
 
-**When this certificate expires (2027-08-12)**, renewing issues a *new*
-certificate, the requirement changes, and every user re-grants once. Unavoidable
-on a free account.
+An Apple Development certificate lasts a year. Renewing issues a *new* certificate, so the
+requirement changes and every user re-grants once. Unavoidable on a free account.
 
-The app is **not notarized** — that needs a paid Developer ID, and this is an
-Apple Development certificate. First launch therefore requires right-click →
-Open, which the website says. If a Developer ID is ever bought, notarization and
-stapling belong in the release workflow, `SIGN_TEAM_ID` and the secrets get
-replaced, and the right-click instruction should come off the site at the same
-time — it would no longer be true.
+The app is **not notarized** — that needs a paid Developer ID, and this is an Apple
+Development certificate. First launch therefore requires right-click → Open, which the
+website says. If a Developer ID is ever bought, notarization and stapling belong in the
+release workflow, the secrets and `SIGN_TEAM_ID` get replaced, and the right-click
+instruction should come off the site at the same time — it would no longer be true.
 
 ## House rules
 

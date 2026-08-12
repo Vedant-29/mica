@@ -30,6 +30,19 @@ engages when a trigger fires:
 
 …unless an **Excluded App** is running, which blocks auto-activation.
 
+## Download
+
+A signed disk image is published with every release:
+
+**[Download the latest release](https://github.com/Vedant-29/mica/releases/latest/download/Mica.dmg)**
+ · [all releases](https://github.com/Vedant-29/mica/releases) · [mica.vedantagrw.com](https://mica.vedantagrw.com)
+
+Drag Mica to Applications, then **right-click the app → Open** the first time. The build is
+signed but not notarized — notarization needs a paid Developer ID — so Gatekeeper asks once.
+Each release also ships a `.sha256` if you want to check the download.
+
+Or build it yourself; see [Build](#build).
+
 ## Requirements
 
 macOS 15 or later. **Developed and tested only on macOS 26.6 (Tahoe)** — earlier versions
@@ -37,7 +50,8 @@ should work but are unverified, and several of the underlying APIs are version-s
 
 ## Build
 
-Needs Xcode 16+ (Swift 6). Then:
+Needs Swift 6.2 (Xcode 26 or later) — `Package.swift` declares tools version 6.2 and
+older toolchains refuse to resolve the package. Then:
 
 ```sh
 make install     # build and install to /Applications
@@ -66,6 +80,21 @@ designated requirement means grants will stick; a `cdhash` means it fell back to
 Always launch from `/Applications` (`make run` or the Finder), never the built binary from
 a shell — macOS attributes permissions to the *calling* process, so a terminal launch
 grants them to your terminal instead of to Mica.
+
+### Releasing
+
+Maintainers only. `VERSION` is the source of truth and the tag is the trigger:
+
+```sh
+make release BUMP=patch     # or minor / major
+```
+
+That bumps `VERSION`, commits, tags `vX.Y.Z` and pushes. CI then runs the tests, builds a
+signed DMG and publishes a GitHub release with the disk image and its checksum attached.
+The website needs no redeploy — its download link always resolves to the newest release.
+
+A tag containing a hyphen (`v0.3.0-rc1`) publishes as a prerelease, so it is downloadable
+but does not become `latest`.
 
 ## First run — what you'll need to do
 
