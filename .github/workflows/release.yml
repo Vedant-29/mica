@@ -34,7 +34,7 @@ jobs:
       HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.tag || github.ref }}
           # BUILD_NUM is `git rev-list --count HEAD`, which needs real history.
@@ -114,7 +114,7 @@ jobs:
       - name: Checksum
         run: shasum -a 256 dist/Mica.dmg | tee dist/Mica.dmg.sha256
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           # Stated explicitly: on workflow_dispatch `github.ref` is the branch the
           # workflow was dispatched from, not the tag being built, and the action

@@ -1,0 +1,12 @@
+# Actions are pinned to commit SHAs so a compromised or retagged release cannot
+# silently gain access to this repository's secrets — the signing certificate and
+# the Cloudflare token both live there. The cost of pinning is that the pins go
+# stale, which is what this file is for: Dependabot bumps the SHA and records the
+# version it moved to, so updates stay a reviewed change rather than an implicit one.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5

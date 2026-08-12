@@ -7,11 +7,15 @@ on:
     branches: [main]
   pull_request:
 
+# Nothing here needs write access, and nothing here reads a secret.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # The macos-15 image defaults to an Xcode carrying Swift 6.1, but Package.swift
       # declares tools 6.2 — so the default toolchain refuses to resolve the package.
       # Pick the newest Xcode actually installed rather than pinning a version that
