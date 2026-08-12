@@ -74,22 +74,44 @@ that is needed for the site to serve the new build; the site is not redeployed.
 A tag containing a hyphen (`v0.3.0-rc1`) is published as a prerelease, so it is
 downloadable but does not become `latest`.
 
-### Signing in CI
+### Signing
 
-Two optional repository secrets:
+Releases are signed with a personal Apple Development certificate:
 
-  MACOS_CERT_P12        base64 of a .p12 export of the codesigning identity
-  MACOS_CERT_PASSWORD   its export password
+    Apple Development: <redacted-email> (<redacted>)
+    SHA-1 <redacted-cert-sha1>, expires 2027-08-12
 
-Without them CI signs ad-hoc, and every update reads to macOS as a new app, so
-users re-grant Screen Recording and Accessibility each time. With them the
-designated requirement is stable and grants persist.
+Configured in two places, which must agree:
 
-The app is **not notarized** — that needs a paid Developer ID, and the current
-identity is Apple Development. First launch therefore requires right-click →
-Open, which the website says. If a Developer ID is ever added, notarization and
-stapling belong in the release workflow, and that instruction should come off the
-site at the same time.
+  Local.mk                  SIGN_IDENTITY, for local builds
+  MACOS_CERT_P12 (secret)   base64 .p12 of that identity plus the WWDR G3
+  MACOS_CERT_PASSWORD       its export password
+  SIGN_TEAM_ID (variable)   <redacted>
+
+`Local.mk` names the certificate by **SHA-1, not by common name**. The login
+keychain holds two certificates with this same CN — the expired 2026 one and the
+current one — and codesign resolving by name could pick either.
+
+Both paths produce the same designated requirement, which is the point:
+
+    identifier "com.vedant.mica" and anchor apple generic
+      and certificate leaf[subject.CN] = "Apple Development: <redacted-email> (<redacted>)"
+
+macOS keys TCC permission grants on that string. Keep it identical across
+releases and users keep their Screen Recording and Accessibility grants; change
+it and every user re-grants. Without any certificate the build is ad-hoc, whose
+requirement is derived from the cdhash and therefore changes every single build.
+
+**When this certificate expires (2027-08-12)**, renewing issues a *new*
+certificate, the requirement changes, and every user re-grants once. Unavoidable
+on a free account.
+
+The app is **not notarized** — that needs a paid Developer ID, and this is an
+Apple Development certificate. First launch therefore requires right-click →
+Open, which the website says. If a Developer ID is ever bought, notarization and
+stapling belong in the release workflow, `SIGN_TEAM_ID` and the secrets get
+replaced, and the right-click instruction should come off the site at the same
+time — it would no longer be true.
 
 ## House rules
 
