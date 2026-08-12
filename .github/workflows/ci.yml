@@ -12,5 +12,14 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      # The macos-15 image defaults to an Xcode carrying Swift 6.1, but Package.swift
+      # declares tools 6.2 — so the default toolchain refuses to resolve the package.
+      # Pick the newest Xcode actually installed rather than pinning a version that
+      # will age out of the image.
+      - name: Select the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer"
+          swift --version
       - run: swift build
       - run: swift test

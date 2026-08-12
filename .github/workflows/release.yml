@@ -25,6 +25,10 @@ jobs:
     runs-on: macos-15
     env:
       BUNDLE_ID: com.vedant.mica
+      # Repository variable, deliberately not hard-coded: whichever identity signs
+      # releases must be one this project actually owns, and it will change if the
+      # certificate is ever reissued under a different team.
+      SIGN_TEAM_ID: ${{ vars.SIGN_TEAM_ID }}
       # `secrets` is not available in a step-level `if`, so the presence check is
       # hoisted to the job env and tested as a string below.
       HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
@@ -35,6 +39,16 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
           # BUILD_NUM is `git rev-list --count HEAD`, which needs real history.
           fetch-depth: 0
+
+      # The macos-15 image defaults to an Xcode carrying Swift 6.1, but Package.swift
+      # declares tools 6.2 — so the default toolchain refuses to resolve the package.
+      # Pick the newest Xcode actually installed rather than pinning a version that
+      # will age out of the image.
+      - name: Select the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer"
+          swift --version
 
       - name: Check the tag matches VERSION
         run: |
@@ -70,7 +84,18 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           rm -f "$RUNNER_TEMP/cert.p12"
-          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | sed -E 's/.*"(.+)"/\1/')"
+          # Select by team ID, not position. The designated requirement is derived from
+          # the certificate, so signing with a different identity than local builds use
+          # would change it and reset every user's permission grants — exactly what the
+          # certificate is here to prevent.
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | grep "${SIGN_TEAM_ID:-Apple}" | head -1 | sed -E 's/.*"(.+)"/\1/')"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::no codesigning identity matching $SIGN_TEAM_ID in the imported certificate"
+            security find-identity -v -p codesigning "$KEYCHAIN"
+            exit 1
+          fi
+          echo "using $IDENTITY"
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Warn that this build is ad-hoc signed
