@@ -6,6 +6,10 @@ A macOS menu bar app that hides your desktop before anyone else sees it. Press O
 
 A free, open-source, non-sandboxed alternative to [Stealthly](https://stealthly.app/).
 
+[![Mica hiding the desktop](docs/reveal-poster.jpg)](docs/reveal.mp4)
+
+Click the image to watch the demo video.
+
 ## Features
 
 - Do Not Disturb for the duration of a call
@@ -14,6 +18,12 @@ A free, open-source, non-sandboxed alternative to [Stealthly](https://stealthly.
 - Three modes: On, Off, and Auto
 - Auto turns on when screen sharing or recording starts, a display is mirrored or extended, a trigger app launches, or a scheduled time window begins. An excluded app blocks it.
 - Crash safe: prior state is saved to disk first and restored on the next launch if Mica is killed
+
+<p>
+  <img src="docs/panel.png" alt="Mica menu bar panel" width="32%">
+  <img src="docs/windows.png" alt="Window hiding options" width="32%">
+  <img src="docs/triggers.png" alt="Auto triggers settings" width="32%">
+</p>
 
 ## Requirements
 
